@@ -1,13 +1,16 @@
 import { useState, ChangeEvent, FormEvent } from "react";
 import { motion, AnimatePresence, Variants } from "framer-motion";
-import { UploadCloud, User, CreditCard, CheckCircle2, AlertCircle, ArrowRight, ArrowLeft, Bug, Camera, Loader2 } from "lucide-react";
+import { UploadCloud, User, CreditCard, CheckCircle2, AlertCircle, ArrowRight, ArrowLeft, Bug, Camera, Loader2, Image as ImageIcon } from "lucide-react";
 import { useScanner } from "@/features/scanner/useScanner";
 import FaceScanner from "@/features/biometrics/FaceScanner";
 
 export default function Register() {
   const { scanDocument, isScanning, scanError } = useScanner();
   const [step, setStep] = useState<1 | 2>(1);
-  const [isCameraActive, setIsCameraActive] = useState(false); // STATE KAMERA
+  const [isCameraActive, setIsCameraActive] = useState(false);
+  
+  // STATE BARU UNTUK PREVIEW FOTO KTP
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
   
   const [formData, setFormData] = useState<{ id: string; full_name: string; identity_number: string; face_descriptor: number[] | null; }>({
     id: crypto.randomUUID(), full_name: "", identity_number: "", face_descriptor: null
@@ -17,12 +20,24 @@ export default function Register() {
 
   const handleImageUpload = async (e: ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || e.target.files.length === 0) return;
-    const data = await scanDocument(e.target.files[0]);
-    if (data) setFormData(prev => ({ ...prev, identity_number: data.identityNumber || prev.identity_number, full_name: data.fullName || prev.full_name }));
+    
+    const file = e.target.files[0];
+    
+    // Tampilkan gambar seketika di layar
+    setImagePreview(URL.createObjectURL(file));
+    
+    // Jalankan proses scan
+    const data = await scanDocument(file);
+    if (data) {
+      setFormData(prev => ({ 
+        ...prev, 
+        identity_number: data.identityNumber || prev.identity_number, 
+        full_name: data.fullName || prev.full_name 
+      }));
+    }
   };
 
   const handleFaceExtracted = (descriptor: number[]) => setFormData(prev => ({ ...prev, face_descriptor: descriptor }));
-
   const injectDummyData = () => { setFormData(prev => ({ ...prev, full_name: "John Doe Testing", identity_number: "3509123456789012" })); };
 
   const handleSubmit = async (e: FormEvent) => {
@@ -38,21 +53,14 @@ export default function Register() {
       if (!response.ok) throw new Error(result.error || "Registration failed");
 
       setMessage("Registration successful");
-      setStep(1); setIsCameraActive(false);
+      setStep(1); setIsCameraActive(false); setImagePreview(null);
       setFormData({ id: crypto.randomUUID(), full_name: "", identity_number: "", face_descriptor: null });
     } catch (error: any) { setMessage(error.message); } 
     finally { setIsSubmitting(false); }
   };
 
-  const pageTransition: Variants = {
-    hidden: { opacity: 0, x: 20 },
-    show: { opacity: 1, x: 0, transition: { duration: 0.3, ease: "easeOut" } },
-    exit: { opacity: 0, x: -20, transition: { duration: 0.2 } }
-  };
-
-  const stepVariants: Variants = {
-    hidden: { opacity: 0, y: 10 }, show: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 300, damping: 24 } }, exit: { opacity: 0, y: -10, transition: { duration: 0.2 } }
-  };
+  const pageTransition: Variants = { hidden: { opacity: 0, x: 20 }, show: { opacity: 1, x: 0, transition: { duration: 0.3, ease: "easeOut" } }, exit: { opacity: 0, x: -20, transition: { duration: 0.2 } } };
+  const stepVariants: Variants = { hidden: { opacity: 0, y: 10 }, show: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 300, damping: 24 } }, exit: { opacity: 0, y: -10, transition: { duration: 0.2 } } };
 
   return (
     <motion.div variants={pageTransition} initial="hidden" animate="show" exit="exit" className="min-h-screen flex items-center justify-center p-4 sm:p-8 bg-[#FAF9F6]">
@@ -71,13 +79,46 @@ export default function Register() {
           <AnimatePresence mode="wait">
             {step === 1 && (
               <motion.div key="step1" variants={stepVariants} initial="hidden" animate="show" exit="exit" className="space-y-5">
-                <label className="cursor-pointer group block">
-                  <div className="w-full border-2 border-dashed border-gray-200 rounded-2xl p-5 flex flex-col items-center justify-center bg-gray-50/50 group-hover:bg-gray-50 transition-colors">
-                    {isScanning ? <Loader2 className="w-6 h-6 text-gray-400 mb-2 animate-spin" /> : <UploadCloud className="w-6 h-6 text-gray-400 mb-2 group-hover:text-gray-600" />}
-                    <span className="text-sm font-bold text-gray-600">{isScanning ? "Scanning ID Card..." : "Upload ID Card"}</span>
+                
+                {/* AREA UPLOAD DENGAN ANIMASI PREVIEW FOTO */}
+                <label className="cursor-pointer group block relative h-40 w-full rounded-2xl overflow-hidden border-2 border-dashed border-gray-200 bg-gray-50/50 hover:bg-gray-50 transition-colors">
+                  
+                  {/* FOTO YANG DIUPLOAD */}
+                  <AnimatePresence>
+                    {imagePreview && (
+                      <motion.img 
+                        initial={{ opacity: 0, scale: 0.8 }} 
+                        animate={{ opacity: 1, scale: 1 }} 
+                        src={imagePreview} 
+                        alt="ID Card Preview" 
+                        className="absolute inset-0 w-full h-full object-cover z-0"
+                      />
+                    )}
+                  </AnimatePresence>
+
+                  {/* OVERLAY TRANSLUSEN (Muncul saat foto ada atau sedang scan) */}
+                  <div className={`absolute inset-0 z-10 flex flex-col items-center justify-center transition-all ${imagePreview ? 'bg-gray-900/40 backdrop-blur-[2px] opacity-0 group-hover:opacity-100' : ''} ${isScanning ? 'bg-gray-900/60 backdrop-blur-sm opacity-100' : ''}`}>
+                    {isScanning ? (
+                      <>
+                        <Loader2 className="w-8 h-8 text-white mb-2 animate-spin" />
+                        <span className="text-sm font-bold text-white drop-shadow-md">Membaca KTP...</span>
+                      </>
+                    ) : imagePreview ? (
+                      <>
+                        <ImageIcon className="w-8 h-8 text-white mb-2" />
+                        <span className="text-sm font-bold text-white drop-shadow-md">Ganti Foto</span>
+                      </>
+                    ) : (
+                      <>
+                        <UploadCloud className="w-8 h-8 text-gray-400 mb-2 group-hover:text-gray-600 transition-colors" />
+                        <span className="text-sm font-bold text-gray-600">Upload ID Card</span>
+                      </>
+                    )}
                   </div>
+                  
                   <input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" disabled={isScanning} />
                 </label>
+
                 {scanError && <p className="text-red-500 text-xs font-semibold flex items-center gap-1"><AlertCircle className="w-3 h-3"/> {scanError}</p>}
 
                 <div className="space-y-4">
@@ -100,8 +141,6 @@ export default function Register() {
             {step === 2 && (
               <motion.div key="step2" variants={stepVariants} initial="hidden" animate="show" exit="exit" className="space-y-5">
                 <div className="bg-gray-50/50 p-2 rounded-2xl border border-gray-100">
-                  
-                  {/* LOGIKA ON-DEMAND CAMERA */}
                   {!isCameraActive ? (
                     <div className="w-full aspect-[4/3] flex flex-col items-center justify-center border-2 border-dashed border-gray-200 rounded-xl bg-gray-50/50">
                       <Camera className="w-8 h-8 text-gray-300 mb-3" />
@@ -113,7 +152,6 @@ export default function Register() {
                   ) : (
                     <FaceScanner onFaceExtracted={handleFaceExtracted} />
                   )}
-
                 </div>
                 
                 {formData.face_descriptor && (

@@ -1,38 +1,61 @@
-import { useState, useCallback } from "react";
-import Tesseract from "tesseract.js";
+import { useState } from "react";
 
-export const useScanner = () => {
+export function useScanner() {
   const [isScanning, setIsScanning] = useState(false);
   const [scanError, setScanError] = useState<string | null>(null);
 
-  const scanDocument = useCallback(async (imageFile: File): Promise<Record<string, string> | null> => {
+  const scanDocument = async (file: File) => {
     setIsScanning(true);
     setScanError(null);
+
     try {
-      const result = await Tesseract.recognize(imageFile, "ind");
-      const text = result.data.text;
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("language", "eng");
+      formData.append("isOverlayRequired", "false");
+      formData.append("scale", "true");
+      formData.append("detectOrientation", "true");
+
+      const response = await fetch("https://library-worker.librarysystem.workers.dev/api/ocr", {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await response.json();
+
+      if (data.IsErroredOnProcessing || data.error) {
+        throw new Error(data.ErrorMessage?.[0] || data.error || "Gagal memproses gambar di server");
+      }
+
+      const parsedText = data.ParsedResults?.[0]?.ParsedText || "";
       
-      const nikMatch = text.match(/\b\d{16}\b/);
+      // 1. Ambil NIK
+      const nikMatch = parsedText.match(/\b\d{16}\b/);
       const identityNumber = nikMatch ? nikMatch[0] : "";
       
-      const nameMatch = text.match(/Nama\s*[:|;]?\s*([^\n]+)/i);
+      // 2. Ambil Nama (Logika Baru yang Lebih Cerdas)
+      // Ambil semua teks setelah kata NAMA hingga ganti baris
+      const nameMatch = parsedText.match(/NAMA\s*[:;]?\s*([^\n]+)/i);
       let fullName = nameMatch ? nameMatch[1].trim() : "";
       
-      fullName = fullName.replace(/(TEMPAT|TGL|LAHIR|GOL|DARAH|ALAMAT|RT|RW).*$/i, "").trim();
-      fullName = fullName.replace(/[^a-zA-Z\s\.,]/g, "").trim();
+      // Jika kata "TEMPAT" tidak sengaja terbaca sederet dengan nama, potong di situ!
+      if (fullName.toUpperCase().includes("TEMPAT")) {
+        fullName = fullName.toUpperCase().split("TEMPAT")[0].trim();
+      }
       
-      setIsScanning(false);
-      return {
-        rawText: text,
-        identityNumber,
-        fullName
-      };
+      // Bersihkan dari simbol aneh
+      fullName = fullName.replace(/[^a-zA-Z\s.,]/g, "").trim();
+
+      if (!identityNumber) setScanError("NIK tidak terdeteksi jelas. Silakan ketik manual.");
+
+      return { identityNumber, fullName };
     } catch (error: any) {
-      setIsScanning(false);
-      setScanError("OCR Processing Failed");
+      setScanError(error.message || "Koneksi ke server pembaca gagal.");
       return null;
+    } finally {
+      setIsScanning(false);
     }
-  }, []);
+  };
 
   return { scanDocument, isScanning, scanError };
-};
+}
