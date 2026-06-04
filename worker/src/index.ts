@@ -5,6 +5,7 @@ import { createMember } from "./controllers/member";
 import { loginBiometric } from "./controllers/auth";
 import { getBooks, createBook, deleteBook } from "./controllers/book"; // UBAH IMPORT
 import { borrowBook } from "./controllers/transaction";
+import { processOCR } from "./controllers/ocr"; // <-- 1. IMPORT INI
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -24,5 +25,7 @@ app.post("/api/books", createBook);
 app.delete("/api/books/:id", deleteBook); // TAMBAHKAN ROUTE DELETE
 
 app.post("/api/borrow", borrowBook);
+
+app.post("/api/ocr", processOCR);
 
 export default app;

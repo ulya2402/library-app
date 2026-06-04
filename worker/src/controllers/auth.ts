@@ -3,40 +3,39 @@ import { Env } from "../types/env";
 
 export const loginBiometric = async (c: Context<{ Bindings: Env }>) => {
   try {
-    const body = await c.req.json();
-    const { face_descriptor } = body;
+    const formData = await c.req.formData();
+    const photo = formData.get("photo") as File;
 
-    if (!face_descriptor || !Array.isArray(face_descriptor)) {
-      return c.json({ error: "Invalid biometric data" }, 400);
-    }
+    if (!photo) return c.json({ error: "Foto wajib disertakan" }, 400);
 
-    const matches = await c.env.VECTORIZE_INDEX.query(face_descriptor, { topK: 1 });
+    // 1. MINTA LUXAND MENCARI WAJAH TERSEBUT
+    const luxForm = new FormData();
+    luxForm.append("photo", photo);
 
-    if (!matches.matches || matches.matches.length === 0) {
-      return c.json({ error: "Face not recognized in database" }, 401);
-    }
+    const luxRes = await fetch("https://api.luxand.cloud/photo/search/v2", {
+      method: "POST",
+      headers: { "token": c.env.LUXAND_TOKEN },
+      body: luxForm
+    });
 
-    const bestMatch = matches.matches[0];
+    // PERBAIKAN TS: Tambahkan tipe ": any" di sini
+    const data: any = await luxRes.json();
     
-    if (bestMatch.score < 0.80) {
-      return c.json({ error: "Face similarity score too low. Please try again." }, 401);
+    if (data.status === "failure") return c.json({ error: data.message || "Akses Ditolak: Wajah tidak dikenali" }, 401);
+
+    // 2. AMBIL HASIL KEMIRIPAN TERTINGGI
+    const bestMatch = Array.isArray(data) ? data[0] : (data.recognized_people?.[0]);
+    if (!bestMatch || !bestMatch.name) {
+      return c.json({ error: "Akses Ditolak: Anda belum terdaftar di sistem" }, 401);
     }
 
-    const memberId = bestMatch.id;
-    const member = await c.env.DB.prepare(
-      "SELECT id, full_name, identity_number FROM members WHERE id = ? AND is_active = 1"
-    ).bind(memberId).first();
+    // 3. CARI NAMA (MEMBER ID) DI DATABASE KITA
+    const memberId = bestMatch.name;
+    const member = await c.env.DB.prepare("SELECT * FROM members WHERE id = ?").bind(memberId).first();
+    
+    if (!member) return c.json({ error: "Wajah dikenali, tapi data anggota hilang dari database D1." }, 404);
 
-    if (!member) {
-      return c.json({ error: "Member account not found or inactive" }, 404);
-    }
-
-    return c.json({ 
-      success: true, 
-      member: member,
-      similarity_score: bestMatch.score 
-    }, 200);
-
+    return c.json({ success: true, member }, 200);
   } catch (error: any) {
     return c.json({ error: "Internal server error", details: error.message }, 500);
   }

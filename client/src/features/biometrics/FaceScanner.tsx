@@ -1,99 +1,43 @@
-import { useEffect, useRef, useState } from "react";
-import { useFaceBiometrics } from "./useFaceBiometrics";
+import { useRef, useState, useEffect } from "react";
+import { Camera } from "lucide-react";
 
-interface FaceScannerProps {
-  onFaceExtracted: (descriptor: number[]) => void;
-}
-
-export default function FaceScanner({ onFaceExtracted }: FaceScannerProps) {
+export default function FaceScanner({ onFaceCaptured }: { onFaceCaptured: (blob: Blob) => void }) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const streamRef = useRef<MediaStream | null>(null);
-  const { loadModels, isModelLoaded, extractFaceDescriptor } = useFaceBiometrics();
-  const [isCameraActive, setIsCameraActive] = useState(false);
-  const [status, setStatus] = useState("Loading AI Models...");
+  const [stream, setStream] = useState<MediaStream | null>(null);
 
   useEffect(() => {
-    loadModels();
-    return () => stopCamera();
-  }, [loadModels]);
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } })
+      .then(s => {
+        setStream(s);
+        if (videoRef.current) videoRef.current.srcObject = s;
+      })
+      .catch(e => console.error("Kamera error:", e));
+      
+    return () => { stream?.getTracks().forEach(t => t.stop()); };
+  }, []);
 
-  const startCamera = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-      }
-      streamRef.current = stream;
-      setIsCameraActive(true);
-      setStatus("Camera active. Please look at the camera.");
-    } catch (error) {
-      setStatus("Camera access denied or unavailable.");
-      console.error("Camera Error:", error);
-    }
-  };
-
-  const stopCamera = () => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => track.stop());
-      streamRef.current = null;
-    }
-    setIsCameraActive(false);
-  };
-
-  const captureFace = async () => {
-    if (!videoRef.current || !isModelLoaded) return;
-    setStatus("Scanning face...");
+  const capturePhoto = () => {
+    if (!videoRef.current) return;
+    const canvas = document.createElement("canvas");
+    canvas.width = videoRef.current.videoWidth;
+    canvas.height = videoRef.current.videoHeight;
+    canvas.getContext("2d")?.drawImage(videoRef.current, 0, 0);
     
-    const descriptor = await extractFaceDescriptor(videoRef.current);
-    
-    if (descriptor) {
-      setStatus("Face scan successful!");
-      stopCamera();
-      onFaceExtracted(descriptor);
-    } else {
-      setStatus("No face detected. Try moving closer or to a well-lit area.");
-    }
+    // Konversi hasil jepretan kamera ke format gambar JPG
+    canvas.toBlob(blob => {
+      if (blob) onFaceCaptured(blob);
+    }, "image/jpeg", 0.95);
   };
 
   return (
-    <div className="flex flex-col items-center bg-gray-50 p-4 rounded-lg border border-gray-200">
-      <div className="w-full aspect-video bg-black rounded-lg overflow-hidden flex items-center justify-center relative mb-4">
-        {!isCameraActive && (
-          <span className="text-gray-400 text-sm absolute z-10 font-medium">Camera Offline</span>
-        )}
-        <video 
-          ref={videoRef} 
-          autoPlay 
-          muted 
-          playsInline
-          className={`w-full h-full object-cover ${isCameraActive ? "opacity-100" : "opacity-0"}`}
-        />
-      </div>
-
-      <p className={`text-xs font-semibold mb-4 text-center ${status.includes("successful") ? "text-green-600" : "text-gray-600"}`}>
-        {status}
-      </p>
-
-      <div className="flex gap-2 w-full">
-        {!isCameraActive ? (
-          <button
-            type="button"
-            onClick={startCamera}
-            disabled={!isModelLoaded}
-            className="flex-1 bg-blue-600 text-white py-2 rounded-md text-sm font-semibold hover:bg-blue-700 disabled:bg-gray-400 transition-colors"
-          >
-            Start Camera
-          </button>
-        ) : (
-          <button
-            type="button"
-            onClick={captureFace}
-            className="flex-1 bg-green-600 text-white py-2 rounded-md text-sm font-semibold hover:bg-green-700 transition-colors"
-          >
-            Scan Face
-          </button>
-        )}
-      </div>
+    <div className="relative w-full aspect-[4/3] rounded-2xl overflow-hidden bg-gray-900 shadow-inner">
+      <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover transform -scale-x-100" />
+      <button 
+        type="button" onClick={capturePhoto} 
+        className="absolute bottom-4 left-1/2 -translate-x-1/2 py-3 px-6 bg-white text-gray-900 text-sm font-black rounded-full shadow-2xl hover:scale-105 active:scale-95 transition-transform flex items-center gap-2"
+      >
+        <Camera className="w-4 h-4" /> Snap Photo
+      </button>
     </div>
   );
 }
