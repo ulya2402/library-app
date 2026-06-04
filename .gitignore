@@ -1,0 +1,32 @@
+# Dependencies (Folder pustaka yang sangat berat)
+node_modules/
+/client/node_modules/
+/worker/node_modules/
+
+# Build outputs (Hasil kompresi produksi)
+dist/
+/client/dist/
+/worker/dist/
+*.local
+
+# Cloudflare Wrangler & D1 Local State
+.wrangler/
+/worker/.wrangler/
+.dev.vars
+
+# Logs (Catatan error otomatis)
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Sistem Operasi & Editor
+.DS_Store
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?

@@ -1,0 +1,1 @@
+{"root":["./src/app.tsx","./src/main.tsx","./src/vite-env.d.ts","./src/features/biometrics/facescanner.tsx","./src/features/biometrics/usefacebiometrics.ts","./src/features/scanner/usescanner.ts","./src/pages/dashboard.tsx","./src/pages/login.tsx","./src/pages/register.tsx","./src/store/useauthstore.ts","./src/store/uselocalestore.ts"],"version":"6.0.3"}

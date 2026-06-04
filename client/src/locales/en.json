@@ -1,0 +1,23 @@
+{
+  "catalog": "Library Catalog",
+  "search": "Search books...",
+  "noBooks": "No books available at the moment.",
+  "addFirst": "Click the + button to add your first book.",
+  "addTitle": "Add to Catalog",
+  "publish": "Publish to Catalog",
+  "bookTitle": "Book Title",
+  "authorName": "Author Name",
+  "isbn": "ISBN Number",
+  "stock": "Initial Stock Quantity",
+  "borrow": "Borrow",
+  "left": "Left",
+  "available": "Available",
+  "outOfStock": "Out of Stock",
+  "deleteTitle": "Delete Book?",
+  "deleteDesc": "Are you sure you want to delete this book? This action cannot be undone.",
+  "cancel": "Cancel",
+  "delete": "Delete permanently",
+  "statsCatalog": "Total Titles",
+  "statsAvailable": "Total Stock",
+  "statsOut": "Out of Stock"
+}

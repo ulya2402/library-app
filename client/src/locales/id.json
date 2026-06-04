@@ -1,0 +1,23 @@
+{
+  "catalog": "Katalog Perpustakaan",
+  "search": "Cari buku...",
+  "noBooks": "Tidak ada buku yang tersedia saat ini.",
+  "addFirst": "Klik tombol + untuk menambahkan buku pertama Anda.",
+  "addTitle": "Tambah Katalog",
+  "publish": "Terbitkan ke Katalog",
+  "bookTitle": "Judul Buku",
+  "authorName": "Nama Penulis",
+  "isbn": "Nomor ISBN",
+  "stock": "Jumlah Stok Awal",
+  "borrow": "Pinjam",
+  "left": "Tersedia",
+  "available": "Ada",
+  "outOfStock": "Habis",
+  "deleteTitle": "Hapus Buku?",
+  "deleteDesc": "Apakah Anda yakin ingin menghapus buku ini? Tindakan ini tidak dapat dibatalkan.",
+  "cancel": "Batal",
+  "delete": "Hapus permanen",
+  "statsCatalog": "Total Judul",
+  "statsAvailable": "Total Stok",
+  "statsOut": "Stok Habis"
+}

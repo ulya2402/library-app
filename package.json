@@ -1,0 +1,8 @@
+{
+  "name": "library-system",
+  "private": true,
+  "workspaces": [
+    "client",
+    "worker"
+  ]
+}
