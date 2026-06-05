@@ -1,10 +1,11 @@
 import { create } from 'zustand';
+import { persist, createJSONStorage } from 'zustand/middleware';
 
 interface Member {
   id: string;
   full_name: string;
   identity_number: string;
-  role: string; 
+  role: string;
 }
 
 interface AuthState {
@@ -13,8 +14,16 @@ interface AuthState {
   logout: () => void;
 }
 
-export const useAuthStore = create<AuthState>((set) => ({
-  user: null,
-  login: (userData) => set({ user: userData }),
-  logout: () => set({ user: null }),
-}));
+export const useAuthStore = create<AuthState>()(
+  persist(
+    (set) => ({
+      user: null,
+      login: (userData) => set({ user: userData }),
+      logout: () => set({ user: null }),
+    }),
+    {
+      name: 'library-auth-storage',
+      storage: createJSONStorage(() => localStorage),
+    }
+  )
+);
