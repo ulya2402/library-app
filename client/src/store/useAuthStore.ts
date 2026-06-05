@@ -4,6 +4,7 @@ interface Member {
   id: string;
   full_name: string;
   identity_number: string;
+  role: string; 
 }
 
 interface AuthState {

@@ -1,14 +1,18 @@
 import { useEffect, useState, FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { LogOut, BookOpen, Search, CheckCircle2, Loader2, Plus, X, PlusCircle, Trash2, AlertTriangle, Layers, Package, Sliders } from "lucide-react";
+import { LogOut, BookOpen, Search, CheckCircle2, Loader2, Plus, X, PlusCircle, Trash2, AlertTriangle, Layers, Package, Sliders, Users, Shield } from "lucide-react";
 import { useAuthStore } from "@/store/useAuthStore";
 import { useLocaleStore } from "@/store/useLocaleStore";
+import { Crown, User, Activity } from "lucide-react";
 
 interface Book {
   id: string; title: string; author: string; isbn: string; stock: number;
 }
 
+interface SystemMember {
+  id: string; full_name: string; identity_number: string; role: string; join_date: number; is_active: number;
+}
 export default function Dashboard() {
   const navigate = useNavigate();
   const { user, logout } = useAuthStore();
@@ -21,6 +25,11 @@ export default function Dashboard() {
   
   // STATE KATEGORI / FILTER BARU
   const [activeFilter, setActiveFilter] = useState<"All" | "Available" | "Out of Stock">("All");
+
+  const [viewMode, setViewMode] = useState<"books" | "users">("books");
+  const [systemMembers, setSystemMembers] = useState<SystemMember[]>([]);
+  const [isLoadingUsers, setIsLoadingUsers] = useState(false);
+  const [isUpdatingRole, setIsUpdatingRole] = useState<string | null>(null);
   
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
@@ -39,9 +48,39 @@ export default function Dashboard() {
     finally { setIsLoading(false); }
   };
 
+  const fetchUsers = async () => {
+    setIsLoadingUsers(true);
+    try {
+      const response = await fetch(`${API_URL}/members`);
+      const data = await response.json();
+      if (data.success) setSystemMembers(data.members);
+    } catch (error) { console.error(error); }
+    finally { setIsLoadingUsers(false); }
+  };
+
+  const toggleMemberRole = async (memberId: string, currentRole: string) => {
+    if (!user || user.role !== "admin") return;
+    setIsUpdatingRole(memberId);
+    try {
+      const newRole = currentRole === "admin" ? "member" : "admin";
+      const response = await fetch(`${API_URL}/members/${memberId}/role`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ role: newRole, admin_id: user.id })
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error);
+      
+      setSystemMembers(systemMembers.map(m => m.id === memberId ? { ...m, role: newRole } : m));
+      showToast(lang === "id" ? `Sukses: Diubah menjadi ${newRole.toUpperCase()}` : `Success: Promoted to ${newRole.toUpperCase()}`);
+    } catch (error: any) { showToast(error.message); } 
+    finally { setIsUpdatingRole(null); }
+  };
+
   useEffect(() => {
     if (!user) { navigate("/"); return; }
     fetchBooks();
+    if (user.role === "admin") fetchUsers();
   }, [user, navigate]);
 
   const handleLogout = () => { logout(); navigate("/"); };
@@ -129,9 +168,24 @@ export default function Dashboard() {
             <h1 className="text-sm font-extrabold text-gray-900 leading-tight">{user?.full_name || "Member"}</h1>
             <p className="text-[10px] font-black text-gray-400 tracking-widest uppercase">ID: {user?.identity_number?.slice(0, 8) || "0000"}***</p>
           </div>
+          
+          {/* BADGE ADMIN JIKA USER ADALAH ADMIN */}
+          {user?.role === "admin" && (
+            <span className="ml-2 bg-blue-100 text-blue-700 px-2 py-1 rounded-md text-[9px] font-black uppercase flex items-center gap-1 border border-blue-200">
+              <Shield className="w-3 h-3" /> Admin
+            </span>
+          )}
         </div>
         
         <div className="flex items-center gap-2">
+          {/* NAVIGASI TAB ADMIN PANEL (DESKTOP) */}
+          {user?.role === "admin" && (
+            <div className="hidden sm:flex bg-gray-100 p-1 rounded-xl items-center mr-4">
+              <button onClick={() => setViewMode("books")} className={`px-4 py-1.5 text-[11px] font-black rounded-lg transition-all ${viewMode === 'books' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-400 hover:text-gray-900'}`}>Katalog</button>
+              <button onClick={() => setViewMode("users")} className={`px-4 py-1.5 text-[11px] font-black rounded-lg transition-all flex items-center gap-1 ${viewMode === 'users' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-400 hover:text-gray-900'}`}><Users className="w-3 h-3"/> Pengguna</button>
+            </div>
+          )}
+          
           <div className="bg-gray-200/50 p-1 rounded-xl flex items-center gap-1 mr-2">
             <button onClick={() => setLanguage('en')} className={`px-2.5 py-1 text-[10px] font-black rounded-lg transition-all ${lang === 'en' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-400'}`}>EN</button>
             <button onClick={() => setLanguage('id')} className={`px-2.5 py-1 text-[10px] font-black rounded-lg transition-all ${lang === 'id' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-400'}`}>ID</button>
@@ -142,96 +196,198 @@ export default function Dashboard() {
 
       <main className="max-w-6xl mx-auto px-4 sm:px-8 mt-6">
         
-        {/* STATISTIK BENTO GRID */}
-        <div className="grid grid-cols-3 gap-3 mb-8">
-          <div className="bg-white p-4 rounded-[1.5rem] border border-gray-100 flex flex-col justify-between shadow-sm relative overflow-hidden">
-            <Layers className="w-10 h-10 text-gray-50 absolute -right-2 -bottom-2" />
-            <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{t("statsCatalog")}</span>
-            <span className="text-2xl font-black text-gray-900 mt-1">{isLoading ? "-" : books.length}</span>
+        {/* NAVIGASI TAB ADMIN PANEL UNTUK MOBILE */}
+        {user?.role === "admin" && (
+          <div className="flex sm:hidden bg-gray-100 p-1 rounded-xl items-center mb-6 w-full shadow-inner">
+            <button onClick={() => setViewMode("books")} className={`flex-1 py-2 text-xs font-black rounded-lg transition-all ${viewMode === 'books' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-400'}`}>Katalog Buku</button>
+            <button onClick={() => setViewMode("users")} className={`flex-1 py-2 text-xs font-black rounded-lg transition-all flex items-center justify-center gap-1 ${viewMode === 'users' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-400'}`}><Users className="w-3 h-3"/> Kelola Pengguna</button>
           </div>
-          <div className="bg-white p-4 rounded-[1.5rem] border border-gray-100 flex flex-col justify-between shadow-sm relative overflow-hidden">
-            <Package className="w-10 h-10 text-gray-50 absolute -right-2 -bottom-2" />
-            <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{t("statsAvailable")}</span>
-            <span className="text-2xl font-black text-green-600 mt-1">{isLoading ? "-" : books.reduce((a, b) => a + b.stock, 0)}</span>
-          </div>
-          <div className="bg-white p-4 rounded-[1.5rem] border border-gray-100 flex flex-col justify-between shadow-sm relative overflow-hidden">
-            <Sliders className="w-10 h-10 text-gray-50 absolute -right-2 -bottom-2" />
-            <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{t("statsOut")}</span>
-            <span className="text-2xl font-black text-red-500 mt-1">{isLoading ? "-" : books.filter(b => b.stock === 0).length}</span>
-          </div>
-        </div>
-
-        {/* KATEGORI PILLS & SEARCH */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 gap-4">
-          <div className="flex gap-2 overflow-x-auto pb-2 sm:pb-0 scrollbar-hide">
-            {["All", "Available", "Out of Stock"].map((filter) => (
-              <button 
-                key={filter} 
-                onClick={() => setActiveFilter(filter as any)}
-                className={`px-4 py-2 rounded-full text-xs font-black transition-all whitespace-nowrap ${activeFilter === filter ? "bg-gray-900 text-white shadow-md" : "bg-white text-gray-400 border border-gray-200 hover:bg-gray-50"}`}
-              >
-                {filter === "All" ? t("catalog") : filter === "Available" ? t("available") : t("outOfStock")}
-              </button>
-            ))}
-          </div>
-          
-          <div className="relative w-full sm:w-auto shrink-0">
-            <Search className="w-4 h-4 text-gray-400 absolute left-4 top-1/2 -translate-y-1/2" />
-            <input type="text" placeholder={t("search")} className="pl-11 pr-4 py-2.5 bg-white border border-gray-200 rounded-full text-xs font-bold focus:outline-none focus:border-gray-900 w-full sm:w-[220px] shadow-sm transition-all" />
-          </div>
-        </div>
-
-        {/* BUKU GRID */}
-        {isLoading ? (
-          <div className="flex justify-center py-20"><Loader2 className="w-8 h-8 text-gray-300 animate-spin" /></div>
-        ) : filteredBooks.length === 0 ? (
-          <div className="text-center py-20 bg-white border border-gray-100 rounded-[2rem] shadow-sm">
-            <p className="text-gray-400 font-bold text-sm">Tidak ada buku di kategori ini.</p>
-          </div>
-        ) : (
-          <motion.div layout className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
-            <AnimatePresence>
-              {filteredBooks.map((book) => (
-                <motion.div 
-                  layout 
-                  initial={{ opacity: 0, scale: 0.9 }} 
-                  animate={{ opacity: 1, scale: 1 }} 
-                  exit={{ opacity: 0, scale: 0.9 }} 
-                  transition={{ type: "spring", stiffness: 400, damping: 30 }} 
-                  key={book.id} 
-                  className="bg-white p-2.5 rounded-[2rem] border border-gray-100 shadow-[0_4px_20px_rgba(0,0,0,0.03)] flex flex-col group relative"
-                >
-                  {/* SAMPUL BUKU AESTHETIC */}
-                  <div className={`w-full h-40 rounded-[1.5rem] bg-gradient-to-br ${getGradient(book.id)} p-4 flex flex-col justify-between relative overflow-hidden`}>
-                    <div className="absolute top-0 right-0 w-24 h-24 bg-white/30 rounded-full blur-2xl -mr-8 -mt-8"></div>
-                    <div className="bg-white/60 backdrop-blur-md w-fit p-2.5 rounded-xl text-current"><BookOpen className="w-5 h-5" /></div>
-                    <span className="font-black text-[10px] bg-white/70 backdrop-blur-md px-3 py-1.5 rounded-full w-fit text-gray-900">
-                      {book.stock} {t("left")}
-                    </span>
-                  </div>
-
-                  {/* DETAIL BUKU */}
-                  <div className="px-3 pt-4 pb-2 flex-1 flex flex-col">
-                    <h3 className="font-extrabold text-gray-900 text-sm leading-tight line-clamp-2 mb-1">{book.title}</h3>
-                    <p className="text-[11px] font-bold text-gray-400 flex-1">{book.author}</p>
-
-                    <div className="mt-4 flex items-center justify-between">
-                      <button onClick={() => setBookToDelete(book)} className="p-2.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors"><Trash2 className="w-4 h-4" /></button>
-                      <motion.button 
-                        whileTap={{ scale: 0.92 }}
-                        onClick={() => handleBorrow(book.id)} 
-                        disabled={book.stock === 0 || processingId === book.id} 
-                        className="py-2.5 px-6 bg-gray-900 text-white text-xs font-black rounded-xl hover:bg-black disabled:bg-gray-100 disabled:text-gray-400 transition-colors flex items-center justify-center shadow-lg shadow-gray-900/20 disabled:shadow-none"
-                      >
-                        {processingId === book.id ? <Loader2 className="w-4 h-4 animate-spin" /> : t("borrow")}
-                      </motion.button>
-                    </div>
-                  </div>
-                </motion.div>
-              ))}
-            </AnimatePresence>
-          </motion.div>
         )}
+
+        <AnimatePresence mode="wait">
+          {viewMode === "books" ? (
+            <motion.div key="books-view" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="w-full">
+              {/* STATISTIK BENTO GRID */}
+              <div className="grid grid-cols-3 gap-3 mb-8">
+                <div className="bg-white p-4 rounded-[1.5rem] border border-gray-100 flex flex-col justify-between shadow-sm relative overflow-hidden">
+                  <Layers className="w-10 h-10 text-gray-50 absolute -right-2 -bottom-2" />
+                  <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{t("statsCatalog")}</span>
+                  <span className="text-2xl font-black text-gray-900 mt-1">{isLoading ? "-" : books.length}</span>
+                </div>
+                <div className="bg-white p-4 rounded-[1.5rem] border border-gray-100 flex flex-col justify-between shadow-sm relative overflow-hidden">
+                  <Package className="w-10 h-10 text-gray-50 absolute -right-2 -bottom-2" />
+                  <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{t("statsAvailable")}</span>
+                  <span className="text-2xl font-black text-green-600 mt-1">{isLoading ? "-" : books.reduce((a, b) => a + b.stock, 0)}</span>
+                </div>
+                <div className="bg-white p-4 rounded-[1.5rem] border border-gray-100 flex flex-col justify-between shadow-sm relative overflow-hidden">
+                  <Sliders className="w-10 h-10 text-gray-50 absolute -right-2 -bottom-2" />
+                  <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{t("statsOut")}</span>
+                  <span className="text-2xl font-black text-red-500 mt-1">{isLoading ? "-" : books.filter(b => b.stock === 0).length}</span>
+                </div>
+              </div>
+
+              {/* KATEGORI PILLS & SEARCH */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 gap-4">
+                <div className="flex gap-2 overflow-x-auto pb-2 sm:pb-0 scrollbar-hide">
+                  {["All", "Available", "Out of Stock"].map((filter) => (
+                    <button 
+                      key={filter} 
+                      onClick={() => setActiveFilter(filter as any)}
+                      className={`px-4 py-2 rounded-full text-xs font-black transition-all whitespace-nowrap ${activeFilter === filter ? "bg-gray-900 text-white shadow-md" : "bg-white text-gray-400 border border-gray-200 hover:bg-gray-50"}`}
+                    >
+                      {filter === "All" ? t("catalog") : filter === "Available" ? t("available") : t("outOfStock")}
+                    </button>
+                  ))}
+                </div>
+                
+                <div className="relative w-full sm:w-auto shrink-0">
+                  <Search className="w-4 h-4 text-gray-400 absolute left-4 top-1/2 -translate-y-1/2" />
+                  <input type="text" placeholder={t("search")} className="pl-11 pr-4 py-2.5 bg-white border border-gray-200 rounded-full text-xs font-bold focus:outline-none focus:border-gray-900 w-full sm:w-[220px] shadow-sm transition-all" />
+                </div>
+              </div>
+
+              {/* BUKU GRID */}
+              {isLoading ? (
+                <div className="flex justify-center py-20"><Loader2 className="w-8 h-8 text-gray-300 animate-spin" /></div>
+              ) : filteredBooks.length === 0 ? (
+                <div className="text-center py-20 bg-white border border-gray-100 rounded-[2rem] shadow-sm">
+                  <p className="text-gray-400 font-bold text-sm">Tidak ada buku di kategori ini.</p>
+                </div>
+              ) : (
+                <motion.div layout className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
+                  <AnimatePresence>
+                    {filteredBooks.map((book) => (
+                      <motion.div 
+                        layout 
+                        initial={{ opacity: 0, scale: 0.9 }} 
+                        animate={{ opacity: 1, scale: 1 }} 
+                        exit={{ opacity: 0, scale: 0.9 }} 
+                        transition={{ type: "spring", stiffness: 400, damping: 30 }} 
+                        key={book.id} 
+                        className="bg-white p-2.5 rounded-[2rem] border border-gray-100 shadow-[0_4px_20px_rgba(0,0,0,0.03)] flex flex-col group relative"
+                      >
+                        <div className={`w-full h-40 rounded-[1.5rem] bg-gradient-to-br ${getGradient(book.id)} p-4 flex flex-col justify-between relative overflow-hidden`}>
+                          <div className="absolute top-0 right-0 w-24 h-24 bg-white/30 rounded-full blur-2xl -mr-8 -mt-8"></div>
+                          <div className="bg-white/60 backdrop-blur-md w-fit p-2.5 rounded-xl text-current"><BookOpen className="w-5 h-5" /></div>
+                          <span className="font-black text-[10px] bg-white/70 backdrop-blur-md px-3 py-1.5 rounded-full w-fit text-gray-900">
+                            {book.stock} {t("left")}
+                          </span>
+                        </div>
+
+                        <div className="px-3 pt-4 pb-2 flex-1 flex flex-col">
+                          <h3 className="font-extrabold text-gray-900 text-sm leading-tight line-clamp-2 mb-1">{book.title}</h3>
+                          <p className="text-[11px] font-bold text-gray-400 flex-1">{book.author}</p>
+
+                          <div className="mt-4 flex items-center justify-between">
+                            {/* RBAC PADA TOMBOL HAPUS (HANYA UNTUK ADMIN) */}
+                            {user.role === "admin" ? (
+                              <button onClick={() => setBookToDelete(book)} className="p-2.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors"><Trash2 className="w-4 h-4" /></button>
+                            ) : (
+                              <div className="w-9"></div>
+                            )}
+
+                            <motion.button 
+                              whileTap={{ scale: 0.92 }}
+                              onClick={() => handleBorrow(book.id)} 
+                              disabled={book.stock === 0 || processingId === book.id} 
+                              className="py-2.5 px-6 bg-gray-900 text-white text-xs font-black rounded-xl hover:bg-black disabled:bg-gray-100 disabled:text-gray-400 transition-colors flex items-center justify-center shadow-lg shadow-gray-900/20 disabled:shadow-none"
+                            >
+                              {processingId === book.id ? <Loader2 className="w-4 h-4 animate-spin" /> : t("borrow")}
+                            </motion.button>
+                          </div>
+                        </div>
+                      </motion.div>
+                    ))}
+                  </AnimatePresence>
+                </motion.div>
+              )}
+            </motion.div>
+          ) : (
+            <motion.div key="users-view" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="w-full">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-6">
+              <div className="bg-white p-4 rounded-[1.5rem] border border-gray-100 flex items-center gap-4 shadow-sm">
+                <div className="w-12 h-12 rounded-2xl bg-gray-50 flex items-center justify-center text-gray-400">
+                  <Users className="w-6 h-6" />
+                </div>
+                <div>
+                  <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Total User</p>
+                  <p className="text-xl font-black text-gray-900">{isLoadingUsers ? "-" : systemMembers.length}</p>
+                </div>
+              </div>
+              <div className="bg-white p-4 rounded-[1.5rem] border border-gray-100 flex items-center gap-4 shadow-sm">
+                <div className="w-12 h-12 rounded-2xl bg-blue-50 flex items-center justify-center text-blue-500">
+                  <Crown className="w-6 h-6" />
+                </div>
+                <div>
+                  <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Admin</p>
+                  <p className="text-xl font-black text-gray-900">{isLoadingUsers ? "-" : systemMembers.filter(m => m.role === 'admin').length}</p>
+                </div>
+              </div>
+              <div className="bg-white p-4 rounded-[1.5rem] border border-gray-100 items-center gap-4 shadow-sm hidden sm:flex">
+                <div className="w-12 h-12 rounded-2xl bg-green-50 flex items-center justify-center text-green-500">
+                  <Activity className="w-6 h-6" />
+                </div>
+                <div>
+                  <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Member</p>
+                  <p className="text-xl font-black text-gray-900">{isLoadingUsers ? "-" : systemMembers.filter(m => m.role === 'member').length}</p>
+                </div>
+              </div>
+            </div>
+
+            {isLoadingUsers ? (
+              <div className="flex justify-center py-20"><Loader2 className="w-8 h-8 text-gray-300 animate-spin" /></div>
+            ) : (
+              <motion.div layout className="space-y-3">
+                <AnimatePresence>
+                  {systemMembers.map((member, index) => (
+                    <motion.div
+                      layout
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, scale: 0.95 }}
+                      transition={{ duration: 0.3, delay: index * 0.05 }}
+                      key={member.id}
+                      className="bg-white p-4 sm:p-5 rounded-[1.5rem] border border-gray-100 shadow-[0_4px_20px_rgba(0,0,0,0.02)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.06)] transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+                    >
+                      <div className="flex items-center gap-4">
+                        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-white font-black text-lg uppercase shadow-md shrink-0 ${member.role === 'admin' ? 'bg-gradient-to-br from-blue-500 to-indigo-600' : 'bg-gradient-to-br from-gray-700 to-gray-900'}`}>
+                          {member.full_name.charAt(0)}
+                        </div>
+                        <div className="flex flex-col">
+                          <span className="font-extrabold text-sm text-gray-900 line-clamp-1">{member.full_name}</span>
+                          <span className="text-[11px] font-bold text-gray-400 font-mono mt-0.5">NIK: {member.identity_number}</span>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-row items-center justify-between sm:justify-end gap-3 w-full sm:w-auto border-t border-gray-50 sm:border-t-0 pt-4 sm:pt-0">
+                        <div className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 shrink-0 ${member.role === 'admin' ? 'bg-blue-50 text-blue-600' : 'bg-gray-100 text-gray-500'}`}>
+                          {member.role === 'admin' ? <Crown className="w-3 h-3" /> : <User className="w-3 h-3" />}
+                          {member.role}
+                        </div>
+                        
+                        <motion.button
+                          whileTap={{ scale: 0.95 }}
+                          onClick={() => toggleMemberRole(member.id, member.role)}
+                          disabled={isUpdatingRole === member.id || member.id === user?.id}
+                          className={`text-xs font-black px-5 py-2.5 rounded-xl transition-all disabled:opacity-50 flex items-center justify-center min-w-[140px] ${member.id === user?.id ? 'bg-gray-50 text-gray-300 cursor-not-allowed' : member.role === 'admin' ? 'bg-gray-100 text-gray-600 hover:bg-gray-200 hover:text-gray-900' : 'bg-gray-900 text-white hover:bg-black shadow-lg shadow-gray-900/20'}`}
+                        >
+                          {isUpdatingRole === member.id ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : member.role === 'admin' ? (
+                            'Jadikan Member'
+                          ) : (
+                            'Jadikan Admin'
+                          )}
+                        </motion.button>
+                      </div>
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
+              </motion.div>
+            )}
+          </motion.div>
+          )}
+        </AnimatePresence>
       </main>
 
       {/* POP-UP KONFIRMASI HAPUS (ANTI-TERPOTONG DI HP) */}
@@ -253,7 +409,9 @@ export default function Dashboard() {
       </AnimatePresence>
 
       {/* TOMBOL TAMBAH BUKU MELAYANG */}
-      <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={() => setIsDrawerOpen(true)} className="fixed bottom-6 right-6 p-4 bg-gray-900 text-white rounded-[1.2rem] shadow-xl shadow-gray-900/30 z-30"><Plus className="w-6 h-6" /></motion.button>
+      {user?.role === "admin" && viewMode === "books" && (
+        <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={() => setIsDrawerOpen(true)} className="fixed bottom-6 right-6 p-4 bg-gray-900 text-white rounded-[1.2rem] shadow-xl shadow-gray-900/30 z-30"><Plus className="w-6 h-6" /></motion.button>
+      )}
 
       {/* DRAWER FORM TAMBAH BUKU */}
       <AnimatePresence>

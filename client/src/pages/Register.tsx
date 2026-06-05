@@ -52,7 +52,11 @@ export default function Register() {
     finally { setIsSubmitting(false); }
   };
 
-  const pageTransition: Variants = { hidden: { opacity: 0, x: 20 }, show: { opacity: 1, x: 0, transition: { duration: 0.3 } }, exit: { opacity: 0, x: -20, transition: { duration: 0.2 } } };
+  const pageTransition: Variants = { 
+    hidden: { opacity: 0, scale: 0.95, y: 10 }, 
+    show: { opacity: 1, scale: 1, y: 0, transition: { type: "spring", stiffness: 200, damping: 20 } }, 
+    exit: { opacity: 0, scale: 0.98, y: -10, transition: { duration: 0.2, ease: "easeOut" } } 
+  };
   const stepVariants: Variants = { hidden: { opacity: 0, y: 10 }, show: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 300, damping: 24 } }, exit: { opacity: 0, y: -10, transition: { duration: 0.2 } } };
 
   return (

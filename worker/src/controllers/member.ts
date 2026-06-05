@@ -46,3 +46,41 @@ export const createMember = async (c: Context<{ Bindings: Env }>) => {
     return c.json({ error: "Internal server error", details: error.message }, 500);
   }
 };
+
+// --- AWAL PERUBAHAN: Tambahan Controller Member ---
+export const getMembers = async (c: Context<{ Bindings: Env }>) => {
+  try {
+    const members = await c.env.DB.prepare(
+      "SELECT id, full_name, identity_number, join_date, is_active, role FROM members ORDER BY join_date DESC"
+    ).all();
+    return c.json({ success: true, members: members.results }, 200);
+  } catch (error: any) {
+    return c.json({ error: "Internal server error", details: error.message }, 500);
+  }
+};
+
+export const updateMemberRole = async (c: Context<{ Bindings: Env }>) => {
+  try {
+    const targetMemberId = c.req.param("id");
+    const body = await c.req.json();
+    const { role, admin_id } = body;
+
+    if (!admin_id) return c.json({ error: "Unauthorized access" }, 401);
+
+    // Keamanan API: Cek apakah yang melakukan request benar-benar admin dari database
+    const adminCheck = await c.env.DB.prepare("SELECT role FROM members WHERE id = ?").bind(admin_id).first();
+    if (!adminCheck || (adminCheck as any).role !== "admin") {
+      return c.json({ error: "Forbidden: Hanya Admin yang berhak mengubah Role" }, 403);
+    }
+
+    if (role !== "admin" && role !== "member") {
+      return c.json({ error: "Role type not valid" }, 400);
+    }
+
+    await c.env.DB.prepare("UPDATE members SET role = ? WHERE id = ?").bind(role, targetMemberId).run();
+    return c.json({ success: true, message: "Role updated successfully" }, 200);
+  } catch (error: any) {
+    return c.json({ error: "Internal server error", details: error.message }, 500);
+  }
+};
+// --- BATAS PERUBAHAN ---

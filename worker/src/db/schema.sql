@@ -3,7 +3,8 @@ CREATE TABLE IF NOT EXISTS members (
   full_name TEXT NOT NULL,
   identity_number TEXT UNIQUE NOT NULL,
   join_date INTEGER NOT NULL,
-  is_active INTEGER DEFAULT 1
+  is_active INTEGER DEFAULT 1,
+  role TEXT DEFAULT 'member'
 );
 
 CREATE TABLE IF NOT EXISTS books (

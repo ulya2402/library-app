@@ -13,7 +13,12 @@ export default function Login() {
   const [isCameraActive, setIsCameraActive] = useState(false);
 
   const handleDummyLogin = () => {
-    login({ id: crypto.randomUUID(), full_name: "John Doe Testing", identity_number: "3509123456789012" }); 
+    login({ 
+      id: crypto.randomUUID(), 
+      full_name: "John Doe Testing", 
+      identity_number: "3509123456789012",
+      role: "admin"
+    }); 
     navigate("/dashboard");
   };
 
@@ -39,7 +44,11 @@ export default function Login() {
 
   const handleEnterDashboard = () => { if (result?.memberData) { login(result.memberData); navigate("/dashboard"); } };
 
-  const pageTransition: Variants = { hidden: { opacity: 0, x: -20 }, show: { opacity: 1, x: 0, transition: { duration: 0.3 } }, exit: { opacity: 0, x: 20, transition: { duration: 0.2 } } };
+  const pageTransition: Variants = { 
+    hidden: { opacity: 0, scale: 0.95, y: 10 }, 
+    show: { opacity: 1, scale: 1, y: 0, transition: { type: "spring", stiffness: 200, damping: 20 } }, 
+    exit: { opacity: 0, scale: 0.98, y: -10, transition: { duration: 0.2, ease: "easeOut" } } 
+  };
 
   return (
     <motion.div variants={pageTransition} initial="hidden" animate="show" exit="exit" className="min-h-screen flex items-center justify-center p-4 sm:p-8 bg-[#FAF9F6]">
