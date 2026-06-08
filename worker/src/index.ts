@@ -1,12 +1,11 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { Env } from "./types/env";
-import { createMember } from "./controllers/member";
+import { createMember, getMembers, updateMemberRole, deleteMember } from "./controllers/member";
 import { loginBiometric } from "./controllers/auth";
-import { getBooks, createBook, deleteBook } from "./controllers/book"; // UBAH IMPORT
-import { borrowBook } from "./controllers/transaction";
-import { processOCR } from "./controllers/ocr"; // <-- 1. IMPORT INI
-import { getMembers, updateMemberRole, deleteMember } from "./controllers/member";
+import { getBooks, createBook, deleteBook } from "./controllers/book";
+import { borrowBook, getTransactions, returnBook } from "./controllers/transaction";
+import { processOCR } from "./controllers/ocr";
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -26,9 +25,11 @@ app.post("/api/login", loginBiometric);
 
 app.get("/api/books", getBooks);
 app.post("/api/books", createBook);
-app.delete("/api/books/:id", deleteBook); // TAMBAHKAN ROUTE DELETE
+app.delete("/api/books/:id", deleteBook);
 
 app.post("/api/borrow", borrowBook);
+app.get("/api/transactions", getTransactions);
+app.put("/api/transactions/:id/return", returnBook);
 
 app.post("/api/ocr", processOCR);
 

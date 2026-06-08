@@ -19,5 +19,17 @@
   "delete": "Delete permanently",
   "statsCatalog": "Total Titles",
   "statsAvailable": "Total Stock",
-  "statsOut": "Out of Stock"
+  "statsOut": "Out of Stock",
+  "borrowSettings": "Borrowing Duration",
+  "setDuration": "Set Duration",
+  "hours": "Hours",
+  "days": "Days",
+  "confirmBorrow": "Confirm & Borrow",
+  "myBorrows": "My Borrows",
+  "allBorrows": "All Borrows",
+  "returnBook": "Return Book",
+  "dueIn": "Due in",
+  "overdue": "Overdue",
+  "borrower": "Borrower",
+  "noBorrows": "No books are currently borrowed."
 }

@@ -1,10 +1,16 @@
 import { useEffect, useState, FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { LogOut, BookOpen, Search, CheckCircle2, Loader2, Plus, X, PlusCircle, Trash2, AlertTriangle, Layers, Package, Sliders, Users, Shield } from "lucide-react";
+import { LogOut, BookOpen, Search, CheckCircle2, Loader2, Plus, X, PlusCircle, Trash2, AlertTriangle, Layers, Package, Sliders, Users, Shield, Clock, Calendar } from "lucide-react";
 import { useAuthStore } from "@/store/useAuthStore";
 import { useLocaleStore } from "@/store/useLocaleStore";
 import { Crown, User, Activity } from "lucide-react";
+import { History, ArrowRightCircle } from "lucide-react";
+
+
+interface Transaction {
+  id: string; member_id: string; book_id: string; borrow_date: number; due_date: number; title: string; author: string; member_name: string;
+}
 
 interface Book {
   id: string; title: string; author: string; isbn: string; stock: number;
@@ -25,8 +31,11 @@ export default function Dashboard() {
   
   // STATE KATEGORI / FILTER BARU
   const [activeFilter, setActiveFilter] = useState<"All" | "Available" | "Out of Stock">("All");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [viewMode, setViewMode] = useState<"books" | "users" | "borrowed">("books");
 
-  const [viewMode, setViewMode] = useState<"books" | "users">("books");
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [isLoadingTransactions, setIsLoadingTransactions] = useState(false);
   const [systemMembers, setSystemMembers] = useState<SystemMember[]>([]);
   const [isLoadingUsers, setIsLoadingUsers] = useState(false);
   const [isUpdatingRole, setIsUpdatingRole] = useState<string | null>(null);
@@ -39,6 +48,10 @@ export default function Dashboard() {
 
   const [memberToDelete, setMemberToDelete] = useState<SystemMember | null>(null);
   const [isDeletingMember, setIsDeletingMember] = useState(false);
+
+  const [borrowBookTarget, setBorrowBookTarget] = useState<Book | null>(null);
+  const [borrowAmount, setBorrowAmount] = useState("1");
+  const [borrowUnit, setBorrowUnit] = useState<"hours" | "days">("days");
 
   const API_URL = "https://library-worker.librarysystem.workers.dev/api";
 
@@ -75,6 +88,42 @@ export default function Dashboard() {
     finally { setIsLoadingUsers(false); }
   };
 
+  const fetchTransactions = async () => {
+    if (!user) return;
+    setIsLoadingTransactions(true);
+    try {
+      const url = user.role === 'admin' 
+        ? `${API_URL}/transactions?role=admin` 
+        : `${API_URL}/transactions?member_id=${user.id}`;
+      const response = await fetch(url);
+      const data = await response.json();
+      if (data.success) setTransactions(data.transactions);
+    } catch (error) { console.error(error); }
+    finally { setIsLoadingTransactions(false); }
+  };
+
+  const handleReturnBook = async (transactionId: string) => {
+    setProcessingId(transactionId);
+    try {
+      const response = await fetch(`${API_URL}/transactions/${transactionId}/return`, { method: "PUT" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Failed to return book");
+      
+      setTransactions(transactions.filter(t => t.id !== transactionId));
+      fetchBooks();
+      showToast(lang === "id" ? "Buku sukses dikembalikan!" : "Book returned successfully!");
+    } catch (error: any) { showToast(error.message); } 
+    finally { setProcessingId(null); }
+  };
+
+  const getStatusProps = (dueDateSec: number) => {
+    const now = Math.floor(Date.now() / 1000);
+    const diff = dueDateSec - now;
+    if (diff < 0) return { color: "bg-red-50 text-red-600 border-red-200 shadow-red-100", icon: <AlertTriangle className="w-3 h-3"/>, label: t("overdue") };
+    if (diff < 86400) return { color: "bg-amber-50 text-amber-600 border-amber-200 shadow-amber-100", icon: <Clock className="w-3 h-3"/>, label: `${t("dueIn")} ${Math.floor(diff / 3600)} ${t("hours")}` };
+    return { color: "bg-emerald-50 text-emerald-600 border-emerald-200 shadow-emerald-100", icon: <CheckCircle2 className="w-3 h-3"/>, label: `${t("dueIn")} ${Math.floor(diff / 86400)} ${t("days")}` };
+  };
+
   const toggleMemberRole = async (memberId: string, currentRole: string) => {
     if (!user || user.role !== "admin") return;
     setIsUpdatingRole(memberId);
@@ -97,28 +146,37 @@ export default function Dashboard() {
   useEffect(() => {
     if (!user) { navigate("/"); return; }
     fetchBooks();
+    fetchTransactions();
     if (user.role === "admin") fetchUsers();
   }, [user, navigate]);
 
   const handleLogout = () => { logout(); navigate("/"); };
 
-  const handleBorrow = async (bookId: string) => {
-    if (!user) return;
-    setProcessingId(bookId);
+  const submitBorrow = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!user || !borrowBookTarget) return;
+    setProcessingId(borrowBookTarget.id);
     try {
       const response = await fetch(`${API_URL}/borrow`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ member_id: user.id, book_id: bookId })
+        body: JSON.stringify({ 
+          member_id: user.id, 
+          book_id: borrowBookTarget.id,
+          duration_amount: Number(borrowAmount),
+          duration_unit: borrowUnit
+        })
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Gagal meminjam buku");
+      if (!response.ok) throw new Error(data.error || "Failed to process transaction");
       
-      setBooks(books.map(b => b.id === bookId ? { ...b, stock: b.stock - 1 } : b));
+      setBooks(books.map(b => b.id === borrowBookTarget.id ? { ...b, stock: b.stock - 1 } : b));
       showToast(lang === "id" ? "Buku berhasil dipinjam!" : "Book borrowed successfully!");
+      setBorrowBookTarget(null);
+      setBorrowAmount("1");
+      setBorrowUnit("days");
     } catch (error: any) { 
-      // PENANGANAN ERROR JIKA MENGGUNAKAN AKUN DUMMY
       if(error.message.includes("FOREIGN KEY") || error.message.includes("Internal")) {
-        showToast("Error: Anda menggunakan akun Dummy. Silakan Register wajah asli.");
+        showToast("Error: Invalid User Session. Please re-register.");
       } else {
         showToast(error.message); 
       }
@@ -166,11 +224,10 @@ export default function Dashboard() {
     return gradients[index];
   };
 
-  // LOGIKA FILTER KATEGORI
   const filteredBooks = books.filter(b => {
-    if (activeFilter === "Available") return b.stock > 0;
-    if (activeFilter === "Out of Stock") return b.stock === 0;
-    return true;
+    const matchSearch = b.title.toLowerCase().includes(searchQuery.toLowerCase()) || b.author.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchFilter = activeFilter === "All" ? true : activeFilter === "Available" ? b.stock > 0 : b.stock === 0;
+    return matchSearch && matchFilter;
   });
 
   if (!user) return null;
@@ -186,7 +243,6 @@ export default function Dashboard() {
             <p className="text-[10px] font-black text-gray-400 tracking-widest uppercase">ID: {user?.identity_number?.slice(0, 8) || "0000"}***</p>
           </div>
           
-          {/* BADGE ADMIN JIKA USER ADALAH ADMIN */}
           {user?.role === "admin" && (
             <span className="ml-2 bg-blue-100 text-blue-700 px-2 py-1 rounded-md text-[9px] font-black uppercase flex items-center gap-1 border border-blue-200">
               <Shield className="w-3 h-3" /> Admin
@@ -195,13 +251,13 @@ export default function Dashboard() {
         </div>
         
         <div className="flex items-center gap-2">
-          {/* NAVIGASI TAB ADMIN PANEL (DESKTOP) */}
-          {user?.role === "admin" && (
-            <div className="hidden sm:flex bg-gray-100 p-1 rounded-xl items-center mr-4">
-              <button onClick={() => setViewMode("books")} className={`px-4 py-1.5 text-[11px] font-black rounded-lg transition-all ${viewMode === 'books' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-400 hover:text-gray-900'}`}>Katalog</button>
-              <button onClick={() => setViewMode("users")} className={`px-4 py-1.5 text-[11px] font-black rounded-lg transition-all flex items-center gap-1 ${viewMode === 'users' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-400 hover:text-gray-900'}`}><Users className="w-3 h-3"/> Pengguna</button>
-            </div>
-          )}
+          <div className="hidden sm:flex bg-gray-100 p-1 rounded-xl items-center mr-4">
+            <button onClick={() => setViewMode("books")} className={`px-4 py-1.5 text-[11px] font-black rounded-lg transition-all ${viewMode === 'books' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-400 hover:text-gray-900'}`}>{t("catalog")}</button>
+            <button onClick={() => {setViewMode("borrowed"); fetchTransactions();}} className={`px-4 py-1.5 text-[11px] font-black rounded-lg transition-all flex items-center gap-1.5 ${viewMode === 'borrowed' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-400 hover:text-gray-900'}`}><History className="w-3 h-3"/> {user?.role === "admin" ? t("allBorrows") : t("myBorrows")}</button>
+            {user?.role === "admin" && (
+              <button onClick={() => setViewMode("users")} className={`px-4 py-1.5 text-[11px] font-black rounded-lg transition-all flex items-center gap-1.5 ${viewMode === 'users' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-400 hover:text-gray-900'}`}><Users className="w-3 h-3"/> Pengguna</button>
+            )}
+          </div>
           
           <div className="bg-gray-200/50 p-1 rounded-xl flex items-center gap-1 mr-2">
             <button onClick={() => setLanguage('en')} className={`px-2.5 py-1 text-[10px] font-black rounded-lg transition-all ${lang === 'en' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-400'}`}>EN</button>
@@ -213,18 +269,18 @@ export default function Dashboard() {
 
       <main className="max-w-6xl mx-auto px-4 sm:px-8 mt-6">
         
-        {/* NAVIGASI TAB ADMIN PANEL UNTUK MOBILE */}
-        {user?.role === "admin" && (
-          <div className="flex sm:hidden bg-gray-100 p-1 rounded-xl items-center mb-6 w-full shadow-inner">
-            <button onClick={() => setViewMode("books")} className={`flex-1 py-2 text-xs font-black rounded-lg transition-all ${viewMode === 'books' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-400'}`}>Katalog Buku</button>
-            <button onClick={() => setViewMode("users")} className={`flex-1 py-2 text-xs font-black rounded-lg transition-all flex items-center justify-center gap-1 ${viewMode === 'users' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-400'}`}><Users className="w-3 h-3"/> Kelola Pengguna</button>
-          </div>
-        )}
+        <div className="flex sm:hidden bg-gray-100 p-1 rounded-xl items-center mb-6 w-full shadow-inner overflow-x-auto scrollbar-hide">
+          <button onClick={() => setViewMode("books")} className={`flex-1 min-w-[100px] py-2 text-[11px] font-black rounded-lg transition-all ${viewMode === 'books' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-400'}`}>{t("catalog")}</button>
+          <button onClick={() => {setViewMode("borrowed"); fetchTransactions();}} className={`flex-1 min-w-[120px] py-2 text-[11px] font-black rounded-lg transition-all flex items-center justify-center gap-1 ${viewMode === 'borrowed' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-400'}`}><History className="w-3 h-3"/> {user?.role === "admin" ? t("allBorrows") : t("myBorrows")}</button>
+          {user?.role === "admin" && (
+            <button onClick={() => setViewMode("users")} className={`flex-1 min-w-[100px] py-2 text-[11px] font-black rounded-lg transition-all flex items-center justify-center gap-1 ${viewMode === 'users' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-400'}`}><Users className="w-3 h-3"/> Pengguna</button>
+          )}
+        </div>
 
         <AnimatePresence mode="wait">
-          {viewMode === "books" ? (
+          
+          {viewMode === "books" && (
             <motion.div key="books-view" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="w-full">
-              {/* STATISTIK BENTO GRID */}
               <div className="grid grid-cols-3 gap-3 mb-8">
                 <div className="bg-white p-4 rounded-[1.5rem] border border-gray-100 flex flex-col justify-between shadow-sm relative overflow-hidden">
                   <Layers className="w-10 h-10 text-gray-50 absolute -right-2 -bottom-2" />
@@ -243,7 +299,6 @@ export default function Dashboard() {
                 </div>
               </div>
 
-              {/* KATEGORI PILLS & SEARCH */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 gap-4">
                 <div className="flex gap-2 overflow-x-auto pb-2 sm:pb-0 scrollbar-hide">
                   {["All", "Available", "Out of Stock"].map((filter) => (
@@ -259,11 +314,10 @@ export default function Dashboard() {
                 
                 <div className="relative w-full sm:w-auto shrink-0">
                   <Search className="w-4 h-4 text-gray-400 absolute left-4 top-1/2 -translate-y-1/2" />
-                  <input type="text" placeholder={t("search")} className="pl-11 pr-4 py-2.5 bg-white border border-gray-200 rounded-full text-xs font-bold focus:outline-none focus:border-gray-900 w-full sm:w-[220px] shadow-sm transition-all" />
+                  <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder={t("search")} className="pl-11 pr-4 py-2.5 bg-white border border-gray-200 rounded-full text-xs font-bold focus:outline-none focus:border-gray-900 w-full sm:w-[220px] shadow-sm transition-all" />
                 </div>
               </div>
 
-              {/* BUKU GRID */}
               {isLoading ? (
                 <div className="flex justify-center py-20"><Loader2 className="w-8 h-8 text-gray-300 animate-spin" /></div>
               ) : filteredBooks.length === 0 ? (
@@ -296,7 +350,6 @@ export default function Dashboard() {
                           <p className="text-[11px] font-bold text-gray-400 flex-1">{book.author}</p>
 
                           <div className="mt-4 flex items-center justify-between">
-                            {/* RBAC PADA TOMBOL HAPUS (HANYA UNTUK ADMIN) */}
                             {user.role === "admin" ? (
                               <button onClick={() => setBookToDelete(book)} className="p-2.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors"><Trash2 className="w-4 h-4" /></button>
                             ) : (
@@ -305,11 +358,11 @@ export default function Dashboard() {
 
                             <motion.button 
                               whileTap={{ scale: 0.92 }}
-                              onClick={() => handleBorrow(book.id)} 
-                              disabled={book.stock === 0 || processingId === book.id} 
+                              onClick={() => setBorrowBookTarget(book)} 
+                              disabled={book.stock === 0} 
                               className="py-2.5 px-6 bg-gray-900 text-white text-xs font-black rounded-xl hover:bg-black disabled:bg-gray-100 disabled:text-gray-400 transition-colors flex items-center justify-center shadow-lg shadow-gray-900/20 disabled:shadow-none"
                             >
-                              {processingId === book.id ? <Loader2 className="w-4 h-4 animate-spin" /> : t("borrow")}
+                              {t("borrow")}
                             </motion.button>
                           </div>
                         </div>
@@ -319,98 +372,187 @@ export default function Dashboard() {
                 </motion.div>
               )}
             </motion.div>
-          ) : (
-            <motion.div key="users-view" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="w-full">
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-6">
-              <div className="bg-white p-4 rounded-[1.5rem] border border-gray-100 flex items-center gap-4 shadow-sm">
-                <div className="w-12 h-12 rounded-2xl bg-gray-50 flex items-center justify-center text-gray-400">
-                  <Users className="w-6 h-6" />
-                </div>
-                <div>
-                  <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Total User</p>
-                  <p className="text-xl font-black text-gray-900">{isLoadingUsers ? "-" : systemMembers.length}</p>
-                </div>
-              </div>
-              <div className="bg-white p-4 rounded-[1.5rem] border border-gray-100 flex items-center gap-4 shadow-sm">
-                <div className="w-12 h-12 rounded-2xl bg-blue-50 flex items-center justify-center text-blue-500">
-                  <Crown className="w-6 h-6" />
-                </div>
-                <div>
-                  <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Admin</p>
-                  <p className="text-xl font-black text-gray-900">{isLoadingUsers ? "-" : systemMembers.filter(m => m.role === 'admin').length}</p>
-                </div>
-              </div>
-              <div className="bg-white p-4 rounded-[1.5rem] border border-gray-100 items-center gap-4 shadow-sm hidden sm:flex">
-                <div className="w-12 h-12 rounded-2xl bg-green-50 flex items-center justify-center text-green-500">
-                  <Activity className="w-6 h-6" />
-                </div>
-                <div>
-                  <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Member</p>
-                  <p className="text-xl font-black text-gray-900">{isLoadingUsers ? "-" : systemMembers.filter(m => m.role === 'member').length}</p>
-                </div>
-              </div>
-            </div>
-
-            {isLoadingUsers ? (
-              <div className="flex justify-center py-20"><Loader2 className="w-8 h-8 text-gray-300 animate-spin" /></div>
-            ) : (
-              <motion.div layout className="space-y-3">
-                <AnimatePresence>
-                  {systemMembers.map((member, index) => (
-                    <motion.div
-                      layout
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, scale: 0.95 }}
-                      transition={{ duration: 0.3, delay: index * 0.05 }}
-                      key={member.id}
-                      className="bg-white p-4 sm:p-5 rounded-[1.5rem] border border-gray-100 shadow-[0_4px_20px_rgba(0,0,0,0.02)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.06)] transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4"
-                    >
-                      <div className="flex items-center gap-4">
-                        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-white font-black text-lg uppercase shadow-md shrink-0 ${member.role === 'admin' ? 'bg-gradient-to-br from-blue-500 to-indigo-600' : 'bg-gradient-to-br from-gray-700 to-gray-900'}`}>
-                          {member.full_name.charAt(0)}
-                        </div>
-                        <div className="flex flex-col">
-                          <span className="font-extrabold text-sm text-gray-900 line-clamp-1">{member.full_name}</span>
-                          <span className="text-[11px] font-bold text-gray-400 font-mono mt-0.5">NIK: {member.identity_number}</span>
-                        </div>
-                      </div>
-
-                      <div className="flex flex-row items-center justify-between sm:justify-end gap-2 w-full sm:w-auto border-t border-gray-50 sm:border-t-0 pt-4 sm:pt-0">
-                        <div className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 shrink-0 mr-2 ${member.role === 'admin' ? 'bg-blue-50 text-blue-600' : 'bg-gray-100 text-gray-500'}`}>
-                          {member.role === 'admin' ? <Crown className="w-3 h-3" /> : <User className="w-3 h-3" />}
-                          {member.role}
-                        </div>
-                        
-                        {/* TOMBOL HAPUS (Hanya tampil jika bukan akun admin yang sedang login) */}
-                        {member.id !== user?.id && (
-                          <button onClick={() => setMemberToDelete(member)} className="p-2.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors shrink-0">
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        )}
-
-                        <motion.button
-                          whileTap={{ scale: 0.95 }}
-                          onClick={() => toggleMemberRole(member.id, member.role)}
-                          disabled={isUpdatingRole === member.id || member.id === user?.id}
-                          className={`text-xs font-black px-5 py-2.5 rounded-xl transition-all disabled:opacity-50 flex items-center justify-center min-w-[130px] shrink-0 ${member.id === user?.id ? 'bg-gray-50 text-gray-300 cursor-not-allowed' : member.role === 'admin' ? 'bg-gray-100 text-gray-600 hover:bg-gray-200 hover:text-gray-900' : 'bg-gray-900 text-white hover:bg-black shadow-lg shadow-gray-900/20'}`}
-                        >
-                          {isUpdatingRole === member.id ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                          ) : member.role === 'admin' ? (
-                            'Jadikan Member'
-                          ) : (
-                            'Jadikan Admin'
-                          )}
-                        </motion.button>
-                      </div>
-                    </motion.div>
-                  ))}
-                </AnimatePresence>
-              </motion.div>
-            )}
-          </motion.div>
           )}
+
+          {viewMode === "users" && (
+            <motion.div key="users-view" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="w-full">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-6">
+                <div className="bg-white p-4 rounded-[1.5rem] border border-gray-100 flex items-center gap-4 shadow-sm">
+                  <div className="w-12 h-12 rounded-2xl bg-gray-50 flex items-center justify-center text-gray-400">
+                    <Users className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Total User</p>
+                    <p className="text-xl font-black text-gray-900">{isLoadingUsers ? "-" : systemMembers.length}</p>
+                  </div>
+                </div>
+                <div className="bg-white p-4 rounded-[1.5rem] border border-gray-100 flex items-center gap-4 shadow-sm">
+                  <div className="w-12 h-12 rounded-2xl bg-blue-50 flex items-center justify-center text-blue-500">
+                    <Crown className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Admin</p>
+                    <p className="text-xl font-black text-gray-900">{isLoadingUsers ? "-" : systemMembers.filter(m => m.role === 'admin').length}</p>
+                  </div>
+                </div>
+                <div className="bg-white p-4 rounded-[1.5rem] border border-gray-100 items-center gap-4 shadow-sm hidden sm:flex">
+                  <div className="w-12 h-12 rounded-2xl bg-green-50 flex items-center justify-center text-green-500">
+                    <Activity className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Member</p>
+                    <p className="text-xl font-black text-gray-900">{isLoadingUsers ? "-" : systemMembers.filter(m => m.role === 'member').length}</p>
+                  </div>
+                </div>
+              </div>
+
+              {isLoadingUsers ? (
+                <div className="flex justify-center py-20"><Loader2 className="w-8 h-8 text-gray-300 animate-spin" /></div>
+              ) : (
+                <motion.div layout className="space-y-3">
+                  <AnimatePresence>
+                    {systemMembers.map((member, index) => (
+                      <motion.div
+                        layout
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, scale: 0.95 }}
+                        transition={{ duration: 0.3, delay: index * 0.05 }}
+                        key={member.id}
+                        className="bg-white p-4 sm:p-5 rounded-[1.5rem] border border-gray-100 shadow-[0_4px_20px_rgba(0,0,0,0.02)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.06)] transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+                      >
+                        <div className="flex items-center gap-4">
+                          <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-white font-black text-lg uppercase shadow-md shrink-0 ${member.role === 'admin' ? 'bg-gradient-to-br from-blue-500 to-indigo-600' : 'bg-gradient-to-br from-gray-700 to-gray-900'}`}>
+                            {member.full_name.charAt(0)}
+                          </div>
+                          <div className="flex flex-col">
+                            <span className="font-extrabold text-sm text-gray-900 line-clamp-1">{member.full_name}</span>
+                            <span className="text-[11px] font-bold text-gray-400 font-mono mt-0.5">NIK: {member.identity_number}</span>
+                          </div>
+                        </div>
+
+                        <div className="flex flex-row items-center justify-between sm:justify-end gap-2 w-full sm:w-auto border-t border-gray-50 sm:border-t-0 pt-4 sm:pt-0">
+                          <div className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 shrink-0 mr-2 ${member.role === 'admin' ? 'bg-blue-50 text-blue-600' : 'bg-gray-100 text-gray-500'}`}>
+                            {member.role === 'admin' ? <Crown className="w-3 h-3" /> : <User className="w-3 h-3" />}
+                            {member.role}
+                          </div>
+                          
+                          {member.id !== user?.id && (
+                            <button onClick={() => setMemberToDelete(member)} className="p-2.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors shrink-0">
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
+
+                          <motion.button
+                            whileTap={{ scale: 0.95 }}
+                            onClick={() => toggleMemberRole(member.id, member.role)}
+                            disabled={isUpdatingRole === member.id || member.id === user?.id}
+                            className={`text-xs font-black px-5 py-2.5 rounded-xl transition-all disabled:opacity-50 flex items-center justify-center min-w-[130px] shrink-0 ${member.id === user?.id ? 'bg-gray-50 text-gray-300 cursor-not-allowed' : member.role === 'admin' ? 'bg-gray-100 text-gray-600 hover:bg-gray-200 hover:text-gray-900' : 'bg-gray-900 text-white hover:bg-black shadow-lg shadow-gray-900/20'}`}
+                          >
+                            {isUpdatingRole === member.id ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : member.role === 'admin' ? (
+                              'Jadikan Member'
+                            ) : (
+                              'Jadikan Admin'
+                            )}
+                          </motion.button>
+                        </div>
+                      </motion.div>
+                    ))}
+                  </AnimatePresence>
+                </motion.div>
+              )}
+            </motion.div>
+          )}
+
+          {viewMode === "borrowed" && (
+            <motion.div key="borrowed-view" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="w-full">
+              {isLoadingTransactions ? (
+                <div className="flex justify-center py-20"><Loader2 className="w-8 h-8 text-gray-300 animate-spin" /></div>
+              ) : transactions.length === 0 ? (
+                <motion.div 
+                  initial={{ opacity: 0, scale: 0.95 }} 
+                  animate={{ opacity: 1, scale: 1 }} 
+                  transition={{ duration: 0.4, ease: "easeOut" }}
+                  className="text-center py-24 bg-white border border-gray-100 rounded-[2rem] shadow-sm flex flex-col items-center justify-center min-h-[350px]"
+                >
+                  <motion.div 
+                    animate={{ y: [0, -8, 0] }} 
+                    transition={{ repeat: Infinity, duration: 2.5, ease: "easeInOut" }}
+                    className="w-20 h-20 bg-gray-50 rounded-full flex items-center justify-center mb-5 shadow-inner"
+                  >
+                    <History className="w-10 h-10 text-gray-300" />
+                  </motion.div>
+                  <h3 className="text-sm font-extrabold text-gray-900 mb-1">Daftar Kosong</h3>
+                  <p className="text-xs font-bold text-gray-400 max-w-[250px] leading-relaxed">{t("noBorrows")}</p>
+                </motion.div>
+              ) : (
+                <div className="space-y-3 sm:space-y-4">
+                  <AnimatePresence mode="popLayout">
+                    {transactions.map((tr, index) => {
+                      const status = getStatusProps(tr.due_date);
+                      return (
+                        <motion.div 
+                          layout="position"
+                          initial={{ opacity: 0, scale: 0.95, y: 10 }} 
+                          animate={{ opacity: 1, scale: 1, y: 0 }} 
+                          exit={{ opacity: 0, scale: 0.85, filter: "blur(4px)" }} 
+                          transition={{ 
+                            duration: 0.3, 
+                            delay: Math.min(index * 0.04, 0.4),
+                            layout: { type: "spring", stiffness: 400, damping: 30 }
+                          }} 
+                          key={tr.id} 
+                          className="bg-white p-3.5 sm:p-5 rounded-[1.2rem] sm:rounded-[1.5rem] border border-gray-100 shadow-[0_2px_10px_rgba(0,0,0,0.02)] flex flex-col gap-3 sm:gap-4 hover:shadow-[0_8px_20px_rgba(0,0,0,0.04)] hover:border-gray-200 transition-shadow group origin-center"
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex items-start gap-3 flex-1 min-w-0">
+                              <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-[0.8rem] sm:rounded-2xl flex items-center justify-center shrink-0 ${status.color.replace('border-', '').replace('shadow-', '').replace('border', '')}`}>
+                                {status.icon}
+                              </div>
+                              <div className="flex-1 min-w-0 pt-0.5 sm:pt-1">
+                                <h3 className="font-extrabold text-gray-900 text-xs sm:text-sm truncate leading-tight mb-0.5">{tr.title}</h3>
+                                <p className="text-[9px] sm:text-[11px] font-bold text-gray-400 truncate">{tr.author}</p>
+                              </div>
+                            </div>
+                            <div className={`px-2.5 py-1.5 sm:px-3 sm:py-1.5 rounded-lg text-[8px] sm:text-[10px] font-black uppercase tracking-wider flex items-center gap-1 shadow-sm border shrink-0 ${status.color} whitespace-nowrap`}>
+                              {status.icon} <span>{status.label}</span>
+                            </div>
+                          </div>
+                          
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-t border-gray-50 pt-3">
+                            <div className="flex flex-col sm:flex-row sm:flex-wrap items-start sm:items-center gap-2 sm:gap-3">
+                              {user.role === 'admin' && (
+                                <span className="inline-flex items-center gap-1 px-2 py-1 bg-gray-50 rounded-md text-[9px] sm:text-[10px] font-black text-gray-600 uppercase tracking-wide border border-gray-100 w-max">
+                                  <User className="w-2.5 h-2.5" /> {tr.member_name}
+                                </span>
+                              )}
+                              <span className="text-[9px] sm:text-[10px] font-black text-gray-400 flex items-center gap-1.5 bg-gray-50 px-2.5 py-1 rounded-md w-max">
+                                <Calendar className="w-2.5 h-2.5" /> 
+                                <span className="uppercase tracking-widest">Pinjam:</span> 
+                                {new Date(tr.borrow_date * 1000).toLocaleString(lang === 'id' ? 'id-ID' : 'en-US', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                              </span>
+                            </div>
+                            
+                            <motion.button 
+                              whileTap={{ scale: 0.95 }} 
+                              onClick={() => handleReturnBook(tr.id)} 
+                              disabled={processingId === tr.id} 
+                              className="text-[10px] sm:text-xs font-black px-4 py-2.5 bg-gray-900 text-white rounded-lg sm:rounded-xl hover:bg-black transition-all flex items-center justify-center gap-1.5 shadow-md shadow-gray-900/10 disabled:opacity-50 w-full sm:w-auto shrink-0"
+                            >
+                              {processingId === tr.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <><ArrowRightCircle className="w-3.5 h-3.5" /> {t("returnBook")}</>}
+                            </motion.button>
+                          </div>
+                        </motion.div>
+                      );
+                    })}
+                  </AnimatePresence>
+                </div>
+              )}
+            </motion.div>
+          )}
+
         </AnimatePresence>
       </main>
 
@@ -479,6 +621,57 @@ export default function Dashboard() {
               </form>
             </motion.div>
           </>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {borrowBookTarget && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setBorrowBookTarget(null)} className="absolute inset-0 bg-gray-900/20 backdrop-blur-sm" />
+            <motion.div initial={{ opacity: 0, scale: 0.95, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 10 }} className="bg-white rounded-[2rem] shadow-2xl p-6 w-[calc(100%-2rem)] max-w-[340px] relative z-10 mx-auto border border-gray-100">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-10 h-10 bg-gray-50 rounded-xl flex items-center justify-center text-gray-900"><Clock className="w-5 h-5" /></div>
+                <div>
+                  <h3 className="text-sm font-black text-gray-900 leading-tight">{t("borrowSettings")}</h3>
+                  <p className="text-[10px] font-bold text-gray-400 line-clamp-1">{borrowBookTarget.title}</p>
+                </div>
+              </div>
+              
+              <form onSubmit={submitBorrow} className="space-y-4">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-gray-400 ml-1">{t("setDuration")}</label>
+                  <div className="flex gap-2">
+                    <input 
+                      type="number" 
+                      required 
+                      min="1" 
+                      value={borrowAmount} 
+                      onChange={(e) => setBorrowAmount(e.target.value)} 
+                      className="block w-full px-4 py-3 bg-gray-50 rounded-xl text-xs font-bold text-gray-900 focus:bg-white focus:ring-2 focus:ring-gray-900 outline-none transition-all text-center" 
+                    />
+                    <div className="relative shrink-0 w-32">
+                      <select 
+                        value={borrowUnit} 
+                        onChange={(e) => setBorrowUnit(e.target.value as "hours" | "days")} 
+                        className="appearance-none w-full px-4 py-3 bg-gray-50 rounded-xl text-xs font-bold text-gray-900 focus:bg-white focus:ring-2 focus:ring-gray-900 outline-none transition-all cursor-pointer"
+                      >
+                        <option value="hours">{t("hours")}</option>
+                        <option value="days">{t("days")}</option>
+                      </select>
+                      <Calendar className="w-4 h-4 text-gray-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex gap-2 mt-6">
+                  <button type="button" onClick={() => setBorrowBookTarget(null)} className="flex-1 py-3.5 bg-gray-100 text-gray-900 text-xs font-black rounded-xl hover:bg-gray-200 transition-colors">{t("cancel")}</button>
+                  <button type="submit" disabled={processingId === borrowBookTarget.id} className="flex-[1.5] py-3.5 bg-gray-900 text-white text-xs font-black rounded-xl hover:bg-black transition-colors flex justify-center items-center shadow-lg shadow-gray-900/20">
+                    {processingId === borrowBookTarget.id ? <Loader2 className="w-4 h-4 animate-spin" /> : t("confirmBorrow")}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
         )}
       </AnimatePresence>
 

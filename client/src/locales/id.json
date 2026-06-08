@@ -19,5 +19,17 @@
   "delete": "Hapus permanen",
   "statsCatalog": "Total Judul",
   "statsAvailable": "Total Stok",
-  "statsOut": "Stok Habis"
+  "statsOut": "Stok Habis",
+  "borrowSettings": "Durasi Peminjaman",
+  "setDuration": "Tentukan Waktu",
+  "hours": "Jam",
+  "days": "Hari",
+  "confirmBorrow": "Konfirmasi Pinjam",
+  "myBorrows": "Pinjaman Saya",
+  "allBorrows": "Semua Pinjaman",
+  "returnBook": "Kembalikan Buku",
+  "dueIn": "Tenggat",
+  "overdue": "Terlambat",
+  "borrower": "Peminjam",
+  "noBorrows": "Tidak ada buku yang sedang dipinjam."
 }
