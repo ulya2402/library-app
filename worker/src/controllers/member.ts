@@ -18,25 +18,45 @@ export const createMember = async (c: Context<{ Bindings: Env }>) => {
     const memberId = crypto.randomUUID();
     const joinDate = Math.floor(Date.now() / 1000);
 
-    // 1. DAFTARKAN WAJAH KE LUXAND.CLOUD
-    const luxForm = new FormData();
-    luxForm.append("name", memberId); 
-    luxForm.append("photo", photo);
+    const tokensString = c.env.LUXAND_TOKENS || c.env.LUXAND_TOKEN || "";
+    const tokens = tokensString.split(",").map(t => t.trim()).filter(Boolean);
 
-    const luxRes = await fetch("https://api.luxand.cloud/subject/v2", {
-      method: "POST",
-      headers: { "token": c.env.LUXAND_TOKEN },
-      body: luxForm
-    });
-    
-    // PERBAIKAN TS: Tambahkan tipe ": any" di sini
-    const luxData: any = await luxRes.json();
-    
-    if (luxData.status === "failure") {
-       throw new Error(luxData.message || "Gagal mendaftarkan wajah ke Cloud Server");
+    if (tokens.length === 0) {
+      return c.json({ error: "Konfigurasi Sistem Gagal: Token Luxand belum diatur" }, 500);
     }
 
-    // 2. SIMPAN PROFIL KE DATABASE D1
+    let registeredCount = 0;
+    let lastLuxError = "Gagal mendaftarkan wajah ke Cloud Server";
+
+    for (const token of tokens) {
+      try {
+        const luxForm = new FormData();
+        luxForm.append("name", memberId); 
+        luxForm.append("photo", photo);
+
+        const luxRes = await fetch("https://api.luxand.cloud/subject/v2", {
+          method: "POST",
+          headers: { "token": token },
+          body: luxForm
+        });
+        
+        const luxData: any = await luxRes.json();
+        
+        if (luxData.status !== "failure") {
+           registeredCount++;
+        } else {
+           lastLuxError = luxData.message || lastLuxError;
+           console.warn(`[Luxand API] Gagal sinkronisasi di satu token: ${lastLuxError}`);
+        }
+      } catch (err: any) {
+        console.warn(`[Luxand API] Fetch error saat registrasi: ${err.message}`);
+      }
+    }
+
+    if (registeredCount === 0) {
+       return c.json({ error: "Gagal mendaftarkan wajah ke Server AI", details: lastLuxError }, 500);
+    }
+
     await c.env.DB.prepare(
       "INSERT INTO members (id, full_name, identity_number, join_date) VALUES (?, ?, ?, ?)"
     ).bind(memberId, full_name, identity_number, joinDate).run();

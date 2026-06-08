@@ -3,4 +3,5 @@ export interface Env {
   VECTORIZE_INDEX: VectorizeIndex;
   OCR_API_KEY: string;
   LUXAND_TOKEN: string;
+  LUXAND_TOKENS: string;
 }
