@@ -37,7 +37,24 @@ export default function Dashboard() {
   const [bookToDelete, setBookToDelete] = useState<Book | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
+  const [memberToDelete, setMemberToDelete] = useState<SystemMember | null>(null);
+  const [isDeletingMember, setIsDeletingMember] = useState(false);
+
   const API_URL = "https://library-worker.librarysystem.workers.dev/api";
+
+  const confirmDeleteMember = async () => {
+    if (!memberToDelete || !user) return;
+    setIsDeletingMember(true);
+    try {
+      const response = await fetch(`${API_URL}/members/${memberToDelete.id}?admin_id=${user.id}`, { method: "DELETE" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Gagal menghapus pengguna");
+      
+      setSystemMembers(systemMembers.filter(m => m.id !== memberToDelete.id));
+      showToast(lang === "id" ? "Pengguna berhasil dihapus permanen!" : "User deleted permanently!");
+    } catch (error: any) { showToast(error.message); } 
+    finally { setIsDeletingMember(false); setMemberToDelete(null); }
+  };
 
   const fetchBooks = async () => {
     try {
@@ -359,17 +376,24 @@ export default function Dashboard() {
                         </div>
                       </div>
 
-                      <div className="flex flex-row items-center justify-between sm:justify-end gap-3 w-full sm:w-auto border-t border-gray-50 sm:border-t-0 pt-4 sm:pt-0">
-                        <div className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 shrink-0 ${member.role === 'admin' ? 'bg-blue-50 text-blue-600' : 'bg-gray-100 text-gray-500'}`}>
+                      <div className="flex flex-row items-center justify-between sm:justify-end gap-2 w-full sm:w-auto border-t border-gray-50 sm:border-t-0 pt-4 sm:pt-0">
+                        <div className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 shrink-0 mr-2 ${member.role === 'admin' ? 'bg-blue-50 text-blue-600' : 'bg-gray-100 text-gray-500'}`}>
                           {member.role === 'admin' ? <Crown className="w-3 h-3" /> : <User className="w-3 h-3" />}
                           {member.role}
                         </div>
                         
+                        {/* TOMBOL HAPUS (Hanya tampil jika bukan akun admin yang sedang login) */}
+                        {member.id !== user?.id && (
+                          <button onClick={() => setMemberToDelete(member)} className="p-2.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors shrink-0">
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
+
                         <motion.button
                           whileTap={{ scale: 0.95 }}
                           onClick={() => toggleMemberRole(member.id, member.role)}
                           disabled={isUpdatingRole === member.id || member.id === user?.id}
-                          className={`text-xs font-black px-5 py-2.5 rounded-xl transition-all disabled:opacity-50 flex items-center justify-center min-w-[140px] ${member.id === user?.id ? 'bg-gray-50 text-gray-300 cursor-not-allowed' : member.role === 'admin' ? 'bg-gray-100 text-gray-600 hover:bg-gray-200 hover:text-gray-900' : 'bg-gray-900 text-white hover:bg-black shadow-lg shadow-gray-900/20'}`}
+                          className={`text-xs font-black px-5 py-2.5 rounded-xl transition-all disabled:opacity-50 flex items-center justify-center min-w-[130px] shrink-0 ${member.id === user?.id ? 'bg-gray-50 text-gray-300 cursor-not-allowed' : member.role === 'admin' ? 'bg-gray-100 text-gray-600 hover:bg-gray-200 hover:text-gray-900' : 'bg-gray-900 text-white hover:bg-black shadow-lg shadow-gray-900/20'}`}
                         >
                           {isUpdatingRole === member.id ? (
                             <Loader2 className="w-4 h-4 animate-spin" />
@@ -391,6 +415,26 @@ export default function Dashboard() {
       </main>
 
       {/* POP-UP KONFIRMASI HAPUS (ANTI-TERPOTONG DI HP) */}
+      <AnimatePresence>
+        {memberToDelete && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setMemberToDelete(null)} className="absolute inset-0 bg-gray-900/20 backdrop-blur-sm" />
+            <motion.div initial={{ opacity: 0, scale: 0.95, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 10 }} className="bg-white rounded-3xl shadow-2xl p-6 w-[calc(100%-2rem)] max-w-[320px] relative z-10 mx-auto text-center border border-gray-100">
+              <div className="w-12 h-12 bg-red-50 rounded-2xl flex items-center justify-center mb-4 mx-auto"><AlertTriangle className="w-6 h-6 text-red-500" /></div>
+              <h3 className="text-base font-black text-gray-900 mb-1">{lang === "id" ? "Hapus Pengguna" : "Delete User"}</h3>
+              <p className="text-xs font-bold text-gray-400 mb-6 leading-relaxed">
+                {lang === "id" ? "Anda yakin ingin menghapus" : "Are you sure to remove"} <span className="text-gray-900 font-extrabold">"{memberToDelete.full_name}"</span>? {lang === "id" ? "Tindakan ini tidak bisa dibatalkan." : "This action cannot be undone."}
+              </p>
+              <div className="flex gap-2">
+                <button onClick={() => setMemberToDelete(null)} className="flex-1 py-3 bg-gray-100 text-gray-900 text-xs font-black rounded-xl hover:bg-gray-200 transition-colors">{t("cancel")}</button>
+                <button onClick={confirmDeleteMember} disabled={isDeletingMember} className="flex-1 py-3 bg-red-500 text-white text-xs font-black rounded-xl hover:bg-red-600 transition-colors flex justify-center items-center">
+                  {isDeletingMember ? <Loader2 className="w-4 h-4 animate-spin" /> : t("delete")}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
       <AnimatePresence>
         {bookToDelete && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">

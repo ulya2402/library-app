@@ -103,4 +103,29 @@ export const updateMemberRole = async (c: Context<{ Bindings: Env }>) => {
     return c.json({ error: "Internal server error", details: error.message }, 500);
   }
 };
-// --- BATAS PERUBAHAN ---
+
+export const deleteMember = async (c: Context<{ Bindings: Env }>) => {
+  try {
+    const targetMemberId = c.req.param("id");
+    const adminId = c.req.query("admin_id");
+
+    if (!adminId) return c.json({ error: "Unauthorized access" }, 401);
+
+    const adminCheck = await c.env.DB.prepare("SELECT role FROM members WHERE id = ?").bind(adminId).first();
+    if (!adminCheck || (adminCheck as any).role !== "admin") {
+      return c.json({ error: "Forbidden: Hanya Admin yang berhak menghapus pengguna" }, 403);
+    }
+
+    if (targetMemberId === adminId) {
+      return c.json({ error: "Ditolak: Anda tidak dapat menghapus akun Anda sendiri" }, 400);
+    }
+
+    await c.env.DB.prepare("DELETE FROM transactions WHERE member_id = ?").bind(targetMemberId).run();
+    await c.env.DB.prepare("DELETE FROM members WHERE id = ?").bind(targetMemberId).run();
+    
+    return c.json({ success: true, message: "Member deleted successfully" }, 200);
+  } catch (error: any) {
+    console.error(`[Member API] Internal server error: ${error.message}`);
+    return c.json({ error: "Internal server error", details: error.message }, 500);
+  }
+};

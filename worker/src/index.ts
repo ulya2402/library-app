@@ -6,7 +6,7 @@ import { loginBiometric } from "./controllers/auth";
 import { getBooks, createBook, deleteBook } from "./controllers/book"; // UBAH IMPORT
 import { borrowBook } from "./controllers/transaction";
 import { processOCR } from "./controllers/ocr"; // <-- 1. IMPORT INI
-import { getMembers, updateMemberRole } from "./controllers/member";
+import { getMembers, updateMemberRole, deleteMember } from "./controllers/member";
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -21,6 +21,7 @@ app.get("/health", (c) => c.json({ status: "ok", service: "library-worker" }));
 app.post("/api/members", createMember);
 app.get("/api/members", getMembers);
 app.put("/api/members/:id/role", updateMemberRole);
+app.delete("/api/members/:id", deleteMember);
 app.post("/api/login", loginBiometric);
 
 app.get("/api/books", getBooks);
