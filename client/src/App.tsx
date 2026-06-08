@@ -1,18 +1,20 @@
-import { BrowserRouter, Routes, Route, Link, useLocation } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Link, useLocation, Navigate } from "react-router-dom";
 import { AnimatePresence } from "framer-motion";
 import Dashboard from "@/pages/Dashboard";
 import Register from "@/pages/Register";
 import Login from "@/pages/Login";
+import { useAuthStore } from "@/store/useAuthStore";
 
 function RouteHandler() {
   const location = useLocation();
+  const { user } = useAuthStore();
   
   return (
     <AnimatePresence mode="wait">
       <Routes location={location} key={location.pathname}>
-        <Route path="/" element={<Login />} />
-        <Route path="/register" element={<Register />} />
-        <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/" element={user ? <Navigate to="/dashboard" replace /> : <Login />} />
+        <Route path="/register" element={user ? <Navigate to="/dashboard" replace /> : <Register />} />
+        <Route path="/dashboard" element={user ? <Dashboard /> : <Navigate to="/" replace />} />
       </Routes>
     </AnimatePresence>
   );
@@ -20,8 +22,9 @@ function RouteHandler() {
 
 function NavigationLayout() {
   const location = useLocation();
+  const { user } = useAuthStore();
   
-  if (location.pathname === "/dashboard") {
+  if (location.pathname === "/dashboard" || user) {
     return null;
   }
 
