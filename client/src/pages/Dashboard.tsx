@@ -343,13 +343,20 @@ export default function Dashboard() {
               </div>
 
               <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 gap-4">
-                <div className="flex gap-2 overflow-x-auto pb-2 sm:pb-0 scrollbar-hide">
+                <div className="flex gap-1 overflow-x-auto scrollbar-hide bg-white p-1.5 rounded-[1.2rem] border border-gray-100 shadow-sm w-full sm:w-auto relative">
                   {["All", "Available", "Out of Stock"].map((filter) => (
                     <button 
                       key={filter} 
                       onClick={() => setActiveFilter(filter as any)}
-                      className={`px-4 py-2 rounded-full text-xs font-black transition-all whitespace-nowrap ${activeFilter === filter ? "bg-gray-900 text-white shadow-md" : "bg-white text-gray-400 border border-gray-200 hover:bg-gray-50"}`}
+                      className={`relative flex-1 sm:flex-none px-5 py-2.5 text-xs font-black transition-colors whitespace-nowrap z-10 ${activeFilter === filter ? "text-white" : "text-gray-400 hover:text-gray-900"}`}
                     >
+                      {activeFilter === filter && (
+                        <motion.div
+                          layoutId="active-filter-tab"
+                          className="absolute inset-0 bg-gray-900 rounded-xl shadow-md -z-10"
+                          transition={{ type: "tween", duration: 0.25, ease: "easeOut" }}
+                        />
+                      )}
                       {filter === "All" ? t("catalog") : filter === "Available" ? t("available") : t("outOfStock")}
                     </button>
                   ))}
@@ -357,7 +364,7 @@ export default function Dashboard() {
                 
                 <div className="relative w-full sm:w-auto shrink-0">
                   <Search className="w-4 h-4 text-gray-400 absolute left-4 top-1/2 -translate-y-1/2" />
-                  <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder={t("search")} className="pl-11 pr-4 py-2.5 bg-white border border-gray-200 rounded-full text-xs font-bold focus:outline-none focus:border-gray-900 w-full sm:w-[220px] shadow-sm transition-all" />
+                  <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder={t("search")} className="pl-11 pr-4 py-2.5 bg-white border border-gray-100 rounded-[1.2rem] text-xs font-bold focus:outline-none focus:border-gray-900 focus:ring-2 focus:ring-gray-100 w-full sm:w-[220px] shadow-sm transition-all" />
                 </div>
               </div>
 
@@ -369,16 +376,16 @@ export default function Dashboard() {
                 </div>
               ) : (
                 <motion.div layout className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
-                  <AnimatePresence>
+                  <AnimatePresence mode="popLayout">
                     {filteredBooks.map((book) => (
                       <motion.div 
                         layout 
-                        initial={{ opacity: 0, scale: 0.9 }} 
-                        animate={{ opacity: 1, scale: 1 }} 
-                        exit={{ opacity: 0, scale: 0.9 }} 
-                        transition={{ type: "spring", stiffness: 400, damping: 30 }} 
+                        initial={{ opacity: 0, y: 20 }} 
+                        animate={{ opacity: 1, y: 0 }} 
+                        exit={{ opacity: 0, scale: 0.8 }} 
+                        transition={{ type: "tween", duration: 0.3, ease: "easeOut" }} 
                         key={book.id} 
-                        className="bg-white p-2.5 rounded-[2rem] border border-gray-100 shadow-[0_4px_20px_rgba(0,0,0,0.03)] flex flex-col group relative cursor-pointer hover:shadow-lg transition-shadow"
+                        className="bg-white p-2.5 rounded-[2rem] border border-gray-100 shadow-[0_4px_20px_rgba(0,0,0,0.03)] flex flex-col group relative cursor-pointer active:scale-95 transition-transform origin-center"
                         onClick={() => setSelectedBook(book)}
                       >
                         <motion.div layoutId={`cover-container-${book.id}`} className={`w-full h-48 sm:h-56 rounded-[1.5rem] p-4 flex flex-col justify-between relative overflow-hidden ${!book.cover_url ? `bg-gradient-to-br ${getGradient(book.id)}` : 'bg-gray-100'}`}>
@@ -386,11 +393,11 @@ export default function Dashboard() {
                             <motion.img layoutId={`cover-image-${book.id}`} src={book.cover_url} alt={book.title} className="absolute inset-0 w-full h-full object-cover" />
                           )}
                           {!book.cover_url && (
-                            <div className="absolute top-0 right-0 w-24 h-24 bg-white/30 rounded-full blur-2xl -mr-8 -mt-8"></div>
+                            <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-bl from-white/40 to-transparent rounded-full -mr-10 -mt-10"></div>
                           )}
                           <div className="relative z-10 flex justify-between items-start w-full">
-                            {!book.cover_url && <div className="bg-white/60 backdrop-blur-md w-fit p-2.5 rounded-xl text-current"><BookOpen className="w-5 h-5" /></div>}
-                            <span className="font-black text-[10px] bg-white/90 backdrop-blur-md px-3 py-1.5 rounded-full w-fit text-gray-900 shadow-sm ml-auto">
+                            {!book.cover_url && <div className="bg-white/80 w-fit p-2.5 rounded-xl text-current"><BookOpen className="w-5 h-5" /></div>}
+                            <span className="font-black text-[10px] bg-white/95 px-3 py-1.5 rounded-full w-fit text-gray-900 shadow-sm ml-auto border border-gray-100">
                               {book.stock} {t("left")}
                             </span>
                           </div>
@@ -742,10 +749,16 @@ export default function Dashboard() {
       <AnimatePresence>
         {selectedBook && (
           <div className="fixed inset-0 z-[60] flex items-center justify-center p-0 sm:p-4">
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setSelectedBook(null)} className="absolute inset-0 bg-white/90 backdrop-blur-md" />
+            {/* Background solid abu-abu, BUKAN backdrop-blur */}
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setSelectedBook(null)} className="absolute inset-0 bg-gray-900/60" />
             
-            <motion.div layoutId={`cover-container-${selectedBook.id}`} className="bg-white sm:rounded-[2.5rem] w-full h-full sm:h-auto sm:max-h-[90vh] max-w-4xl relative z-10 mx-auto flex flex-col md:flex-row overflow-hidden shadow-2xl border border-gray-100">
-              <button onClick={() => setSelectedBook(null)} className="absolute top-4 right-4 z-20 p-3 bg-white/50 hover:bg-white backdrop-blur-md rounded-full text-gray-900 transition-all shadow-sm">
+            <motion.div 
+              layoutId={`cover-container-${selectedBook.id}`} 
+              className="bg-white sm:rounded-[2.5rem] w-full h-full sm:h-auto sm:max-h-[90vh] max-w-4xl relative z-10 mx-auto flex flex-col md:flex-row overflow-hidden shadow-2xl"
+              transition={{ type: "tween", duration: 0.35, ease: [0.25, 1, 0.5, 1] }} // Custom kurva ease (sangat ringan)
+            >
+              {/* Tombol close tanpa blur */}
+              <button onClick={() => setSelectedBook(null)} className="absolute top-4 right-4 z-20 p-3 bg-white hover:bg-gray-100 rounded-full text-gray-900 transition-colors shadow-md">
                 <X className="w-5 h-5" />
               </button>
 
@@ -759,7 +772,13 @@ export default function Dashboard() {
                 )}
               </div>
 
-              <div className="flex-1 p-6 sm:p-10 flex flex-col overflow-y-auto">
+              {/* Trik Ilusi: Delay text agar browser tidak ngelag menghitung posisi kata (Layout Thrashing) */}
+              <motion.div 
+                initial={{ opacity: 0, y: 15 }} 
+                animate={{ opacity: 1, y: 0 }} 
+                transition={{ delay: 0.15, duration: 0.3 }}
+                className="flex-1 p-6 sm:p-10 flex flex-col overflow-y-auto"
+              >
                 <div className="flex items-center gap-2 mb-4">
                   <span className="px-3 py-1 bg-gray-100 text-gray-600 text-[10px] font-black uppercase tracking-wider rounded-lg">ISBN: {selectedBook.isbn}</span>
                   <span className={`px-3 py-1 text-[10px] font-black uppercase tracking-wider rounded-lg ${selectedBook.stock > 0 ? 'bg-green-50 text-green-600' : 'bg-red-50 text-red-600'}`}>
@@ -784,16 +803,15 @@ export default function Dashboard() {
                     </button>
                   )}
                   
-                  <motion.button 
-                    whileTap={{ scale: 0.95 }}
+                  <button 
                     onClick={() => { setSelectedBook(null); setTimeout(() => setBorrowBookTarget(selectedBook), 300); }} 
                     disabled={selectedBook.stock === 0} 
                     className="ml-auto py-4 px-10 bg-gray-900 text-white text-sm font-black rounded-2xl hover:bg-black disabled:bg-gray-100 disabled:text-gray-400 transition-all shadow-xl shadow-gray-900/20 disabled:shadow-none"
                   >
                     {t("borrow")}
-                  </motion.button>
+                  </button>
                 </div>
-              </div>
+              </motion.div>
             </motion.div>
           </div>
         )}

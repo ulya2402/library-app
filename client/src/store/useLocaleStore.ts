@@ -13,7 +13,7 @@ interface LocaleState {
 }
 
 export const useLocaleStore = create<LocaleState>((set, get) => ({
-  lang: 'en',
+  lang: 'id',
   t: (key) => dictionaries[get().lang][key] || key,
   setLanguage: (lang) => set({ lang }),
 }));
