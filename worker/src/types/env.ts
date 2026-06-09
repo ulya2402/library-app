@@ -4,4 +4,5 @@ export interface Env {
   OCR_API_KEY: string;
   LUXAND_TOKEN: string;
   LUXAND_TOKENS: string;
+  IMGBB_API_KEY: string;
 }

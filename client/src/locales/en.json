@@ -8,7 +8,7 @@
   "bookTitle": "Book Title",
   "authorName": "Author Name",
   "isbn": "ISBN Number",
-  "stock": "Initial Stock Quantity",
+  "stock": "Initial Stock",
   "borrow": "Borrow",
   "left": "Left",
   "available": "Available",
@@ -31,5 +31,10 @@
   "dueIn": "Due in",
   "overdue": "Overdue",
   "borrower": "Borrower",
-  "noBorrows": "No books are currently borrowed."
+  "noBorrows": "No books are currently borrowed.",
+  "uploading": "Uploading...",
+  "uploadCover": "Upload Cover Image",
+  "description": "Book Description",
+  "aboutBook": "About this Book",
+  "noDescription": "No description available."
 }

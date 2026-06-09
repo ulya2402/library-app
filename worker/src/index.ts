@@ -6,6 +6,7 @@ import { loginBiometric } from "./controllers/auth";
 import { getBooks, createBook, deleteBook } from "./controllers/book";
 import { borrowBook, getTransactions, returnBook } from "./controllers/transaction";
 import { processOCR } from "./controllers/ocr";
+import { uploadCover } from "./controllers/book";
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -26,6 +27,8 @@ app.post("/api/login", loginBiometric);
 app.get("/api/books", getBooks);
 app.post("/api/books", createBook);
 app.delete("/api/books/:id", deleteBook);
+
+app.post("/api/upload", uploadCover); 
 
 app.post("/api/borrow", borrowBook);
 app.get("/api/transactions", getTransactions);

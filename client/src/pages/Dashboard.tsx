@@ -6,6 +6,7 @@ import { useAuthStore } from "@/store/useAuthStore";
 import { useLocaleStore } from "@/store/useLocaleStore";
 import { Crown, User, Activity } from "lucide-react";
 import { History, ArrowRightCircle } from "lucide-react";
+import { UploadCloud } from "lucide-react";
 
 
 interface Transaction {
@@ -13,7 +14,7 @@ interface Transaction {
 }
 
 interface Book {
-  id: string; title: string; author: string; isbn: string; stock: number;
+  id: string; title: string; author: string; isbn: string; stock: number; cover_url?: string; description?: string;
 }
 
 interface SystemMember {
@@ -42,7 +43,10 @@ export default function Dashboard() {
   
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
-  const [newBook, setNewBook] = useState({ title: "", author: "", isbn: "", stock: "1" });
+  const [selectedBook, setSelectedBook] = useState<Book | null>(null);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [uploadedImageUrl, setUploadedImageUrl] = useState("");
+  const [newBook, setNewBook] = useState({ title: "", author: "", isbn: "", stock: "1", description: "", cover_url: "" });
   const [bookToDelete, setBookToDelete] = useState<Book | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -184,17 +188,56 @@ export default function Dashboard() {
     finally { setProcessingId(null); }
   };
 
-  const handleAddBook = async (e: FormEvent) => {
-    e.preventDefault(); setIsAdding(true);
+  // AWAL PERUBAHAN: Pastikan hanya ada 2 fungsi ini (hapus handleAddBook yang lama)
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsUploadingImage(true);
     try {
+      const formData = new FormData();
+      formData.append("image", file);
+      
+      // Kirim ke Backend kita sendiri, BUKAN ke ImgBB langsung
+      const response = await fetch(`${API_URL}/upload`, {
+        method: "POST",
+        body: formData
+      });
+      
+      const data = await response.json();
+      if (!data.success) throw new Error(data.error || "Image upload failed");
+      
+      setUploadedImageUrl(data.url);
+      setNewBook({ ...newBook, cover_url: data.url });
+    } catch (error: any) {
+      showToast(error.message);
+    } finally {
+      setIsUploadingImage(false);
+    }
+  };
+
+  const handleAddBook = async (e: FormEvent) => {
+    e.preventDefault(); 
+    setIsAdding(true);
+    try {
+      const bookData = { ...newBook, cover_url: uploadedImageUrl };
       const response = await fetch(`${API_URL}/books`, {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(newBook)
+        method: "POST", 
+        headers: { "Content-Type": "application/json" }, 
+        body: JSON.stringify(bookData)
       });
       if (!response.ok) throw new Error((await response.json()).error);
       showToast(lang === "id" ? "Buku sukses ditambahkan!" : "New book added!");
-      setIsDrawerOpen(false); setNewBook({ title: "", author: "", isbn: "", stock: "1" }); fetchBooks(); 
-    } catch (error: any) { alert(error.message); } finally { setIsAdding(false); }
+      setIsDrawerOpen(false); 
+      setNewBook({ title: "", author: "", isbn: "", stock: "1", description: "", cover_url: "" }); 
+      setUploadedImageUrl("");
+      fetchBooks(); 
+    } catch (error: any) { 
+      showToast(error.message); 
+    } finally { 
+      setIsAdding(false); 
+    }
   };
+// BATAS PERUBAHAN
 
   const confirmDelete = async () => {
     if (!bookToDelete) return;
@@ -335,36 +378,27 @@ export default function Dashboard() {
                         exit={{ opacity: 0, scale: 0.9 }} 
                         transition={{ type: "spring", stiffness: 400, damping: 30 }} 
                         key={book.id} 
-                        className="bg-white p-2.5 rounded-[2rem] border border-gray-100 shadow-[0_4px_20px_rgba(0,0,0,0.03)] flex flex-col group relative"
+                        className="bg-white p-2.5 rounded-[2rem] border border-gray-100 shadow-[0_4px_20px_rgba(0,0,0,0.03)] flex flex-col group relative cursor-pointer hover:shadow-lg transition-shadow"
+                        onClick={() => setSelectedBook(book)}
                       >
-                        <div className={`w-full h-40 rounded-[1.5rem] bg-gradient-to-br ${getGradient(book.id)} p-4 flex flex-col justify-between relative overflow-hidden`}>
-                          <div className="absolute top-0 right-0 w-24 h-24 bg-white/30 rounded-full blur-2xl -mr-8 -mt-8"></div>
-                          <div className="bg-white/60 backdrop-blur-md w-fit p-2.5 rounded-xl text-current"><BookOpen className="w-5 h-5" /></div>
-                          <span className="font-black text-[10px] bg-white/70 backdrop-blur-md px-3 py-1.5 rounded-full w-fit text-gray-900">
-                            {book.stock} {t("left")}
-                          </span>
-                        </div>
+                        <motion.div layoutId={`cover-container-${book.id}`} className={`w-full h-48 sm:h-56 rounded-[1.5rem] p-4 flex flex-col justify-between relative overflow-hidden ${!book.cover_url ? `bg-gradient-to-br ${getGradient(book.id)}` : 'bg-gray-100'}`}>
+                          {book.cover_url && (
+                            <motion.img layoutId={`cover-image-${book.id}`} src={book.cover_url} alt={book.title} className="absolute inset-0 w-full h-full object-cover" />
+                          )}
+                          {!book.cover_url && (
+                            <div className="absolute top-0 right-0 w-24 h-24 bg-white/30 rounded-full blur-2xl -mr-8 -mt-8"></div>
+                          )}
+                          <div className="relative z-10 flex justify-between items-start w-full">
+                            {!book.cover_url && <div className="bg-white/60 backdrop-blur-md w-fit p-2.5 rounded-xl text-current"><BookOpen className="w-5 h-5" /></div>}
+                            <span className="font-black text-[10px] bg-white/90 backdrop-blur-md px-3 py-1.5 rounded-full w-fit text-gray-900 shadow-sm ml-auto">
+                              {book.stock} {t("left")}
+                            </span>
+                          </div>
+                        </motion.div>
 
                         <div className="px-3 pt-4 pb-2 flex-1 flex flex-col">
                           <h3 className="font-extrabold text-gray-900 text-sm leading-tight line-clamp-2 mb-1">{book.title}</h3>
                           <p className="text-[11px] font-bold text-gray-400 flex-1">{book.author}</p>
-
-                          <div className="mt-4 flex items-center justify-between">
-                            {user.role === "admin" ? (
-                              <button onClick={() => setBookToDelete(book)} className="p-2.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors"><Trash2 className="w-4 h-4" /></button>
-                            ) : (
-                              <div className="w-9"></div>
-                            )}
-
-                            <motion.button 
-                              whileTap={{ scale: 0.92 }}
-                              onClick={() => setBorrowBookTarget(book)} 
-                              disabled={book.stock === 0} 
-                              className="py-2.5 px-6 bg-gray-900 text-white text-xs font-black rounded-xl hover:bg-black disabled:bg-gray-100 disabled:text-gray-400 transition-colors flex items-center justify-center shadow-lg shadow-gray-900/20 disabled:shadow-none"
-                            >
-                              {t("borrow")}
-                            </motion.button>
-                          </div>
                         </div>
                       </motion.div>
                     ))}
@@ -610,14 +644,34 @@ export default function Dashboard() {
                 <button onClick={() => setIsDrawerOpen(false)} className="p-2 text-gray-400 hover:bg-gray-100 rounded-full"><X className="w-4 h-4"/></button>
               </div>
               <form onSubmit={handleAddBook} className="space-y-3">
+                <div className="flex flex-col items-center justify-center w-full mb-4">
+                  <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-gray-200 border-dashed rounded-2xl cursor-pointer bg-gray-50 hover:bg-gray-100 transition-colors relative overflow-hidden">
+                    {uploadedImageUrl ? (
+                      <img src={uploadedImageUrl} alt="Cover Preview" className="absolute inset-0 w-full h-full object-cover opacity-60" />
+                    ) : null}
+                    <div className="flex flex-col items-center justify-center pt-5 pb-6 relative z-10">
+                      {isUploadingImage ? (
+                        <Loader2 className="w-8 h-8 text-gray-900 animate-spin mb-2" />
+                      ) : (
+                        <UploadCloud className="w-8 h-8 text-gray-400 mb-2" />
+                      )}
+                      <p className="text-xs font-bold text-gray-500">
+                        {isUploadingImage ? t("uploading") : t("uploadCover")}
+                      </p>
+                    </div>
+                    <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} disabled={isUploadingImage} />
+                  </label>
+                </div>
+
                 <input type="text" required value={newBook.title} onChange={(e) => setNewBook({...newBook, title: e.target.value})} className="block w-full px-4 py-3.5 bg-gray-50 rounded-xl text-xs font-bold text-gray-900 focus:bg-white focus:ring-2 focus:ring-gray-900 outline-none" placeholder={t("bookTitle")} />
                 <input type="text" required value={newBook.author} onChange={(e) => setNewBook({...newBook, author: e.target.value})} className="block w-full px-4 py-3.5 bg-gray-50 rounded-xl text-xs font-bold text-gray-900 focus:bg-white focus:ring-2 focus:ring-gray-900 outline-none" placeholder={t("authorName")} />
                 <input type="text" required value={newBook.isbn} onChange={(e) => setNewBook({...newBook, isbn: e.target.value})} className="block w-full px-4 py-3.5 bg-gray-50 rounded-xl text-xs font-bold text-gray-900 focus:bg-white focus:ring-2 focus:ring-gray-900 outline-none" placeholder={t("isbn")} />
+                <textarea rows={2} value={newBook.description} onChange={(e) => setNewBook({...newBook, description: e.target.value})} className="block w-full px-4 py-3.5 bg-gray-50 rounded-xl text-xs font-bold text-gray-900 focus:bg-white focus:ring-2 focus:ring-gray-900 outline-none resize-none" placeholder={t("description")}></textarea>
                 <div className="space-y-1">
                   <label className="text-[10px] font-black text-gray-400 ml-1">{t("stock")}</label>
                   <input type="number" required min="1" value={newBook.stock} onChange={(e) => setNewBook({...newBook, stock: e.target.value})} className="block w-full px-4 py-3.5 bg-gray-50 rounded-xl text-xs font-bold text-gray-900 focus:bg-white focus:ring-2 focus:ring-gray-900 outline-none" />
                 </div>
-                <motion.button whileTap={{ scale: 0.96 }} type="submit" disabled={isAdding} className="w-full py-3.5 bg-gray-900 text-white rounded-xl text-xs font-black hover:bg-black transition-all mt-4 flex items-center justify-center shadow-lg shadow-gray-900/20">{isAdding ? <Loader2 className="w-4 h-4 animate-spin" /> : t("publish")}</motion.button>
+                <motion.button whileTap={{ scale: 0.96 }} type="submit" disabled={isAdding || isUploadingImage} className="w-full py-3.5 bg-gray-900 text-white rounded-xl text-xs font-black hover:bg-black transition-all mt-4 flex items-center justify-center shadow-lg shadow-gray-900/20">{isAdding ? <Loader2 className="w-4 h-4 animate-spin" /> : t("publish")}</motion.button>
               </form>
             </motion.div>
           </>
@@ -684,6 +738,67 @@ export default function Dashboard() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      <AnimatePresence>
+        {selectedBook && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-0 sm:p-4">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setSelectedBook(null)} className="absolute inset-0 bg-white/90 backdrop-blur-md" />
+            
+            <motion.div layoutId={`cover-container-${selectedBook.id}`} className="bg-white sm:rounded-[2.5rem] w-full h-full sm:h-auto sm:max-h-[90vh] max-w-4xl relative z-10 mx-auto flex flex-col md:flex-row overflow-hidden shadow-2xl border border-gray-100">
+              <button onClick={() => setSelectedBook(null)} className="absolute top-4 right-4 z-20 p-3 bg-white/50 hover:bg-white backdrop-blur-md rounded-full text-gray-900 transition-all shadow-sm">
+                <X className="w-5 h-5" />
+              </button>
+
+              <div className="w-full md:w-2/5 h-64 md:h-full min-h-[300px] relative bg-gray-100">
+                {selectedBook.cover_url ? (
+                  <motion.img layoutId={`cover-image-${selectedBook.id}`} src={selectedBook.cover_url} alt={selectedBook.title} className="w-full h-full object-cover" />
+                ) : (
+                  <div className={`w-full h-full bg-gradient-to-br ${getGradient(selectedBook.id)} flex items-center justify-center`}>
+                    <BookOpen className="w-20 h-20 text-white/50" />
+                  </div>
+                )}
+              </div>
+
+              <div className="flex-1 p-6 sm:p-10 flex flex-col overflow-y-auto">
+                <div className="flex items-center gap-2 mb-4">
+                  <span className="px-3 py-1 bg-gray-100 text-gray-600 text-[10px] font-black uppercase tracking-wider rounded-lg">ISBN: {selectedBook.isbn}</span>
+                  <span className={`px-3 py-1 text-[10px] font-black uppercase tracking-wider rounded-lg ${selectedBook.stock > 0 ? 'bg-green-50 text-green-600' : 'bg-red-50 text-red-600'}`}>
+                    {selectedBook.stock > 0 ? t("available") : t("outOfStock")} ({selectedBook.stock})
+                  </span>
+                </div>
+
+                <h2 className="text-2xl sm:text-4xl font-black text-gray-900 leading-tight mb-2">{selectedBook.title}</h2>
+                <p className="text-sm font-bold text-gray-400 mb-8">{selectedBook.author}</p>
+
+                <div className="mb-8">
+                  <h4 className="text-xs font-black text-gray-900 uppercase tracking-widest mb-3">{t("aboutBook")}</h4>
+                  <p className="text-sm text-gray-600 leading-relaxed font-medium">
+                    {selectedBook.description || t("noDescription")}
+                  </p>
+                </div>
+
+                <div className="mt-auto pt-6 flex items-center justify-between border-t border-gray-100">
+                  {user?.role === "admin" && (
+                    <button onClick={() => { setSelectedBook(null); setBookToDelete(selectedBook); }} className="p-3.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-2xl transition-colors">
+                      <Trash2 className="w-5 h-5" />
+                    </button>
+                  )}
+                  
+                  <motion.button 
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => { setSelectedBook(null); setTimeout(() => setBorrowBookTarget(selectedBook), 300); }} 
+                    disabled={selectedBook.stock === 0} 
+                    className="ml-auto py-4 px-10 bg-gray-900 text-white text-sm font-black rounded-2xl hover:bg-black disabled:bg-gray-100 disabled:text-gray-400 transition-all shadow-xl shadow-gray-900/20 disabled:shadow-none"
+                  >
+                    {t("borrow")}
+                  </motion.button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
     </motion.div>
   );
 }

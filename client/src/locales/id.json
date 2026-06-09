@@ -8,7 +8,7 @@
   "bookTitle": "Judul Buku",
   "authorName": "Nama Penulis",
   "isbn": "Nomor ISBN",
-  "stock": "Jumlah Stok Awal",
+  "stock": "Jumlah Stok",
   "borrow": "Pinjam",
   "left": "Tersedia",
   "available": "Ada",
@@ -31,5 +31,10 @@
   "dueIn": "Tenggat",
   "overdue": "Terlambat",
   "borrower": "Peminjam",
-  "noBorrows": "Tidak ada buku yang sedang dipinjam."
+  "noBorrows": "Tidak ada buku yang sedang dipinjam.",
+  "uploading": "Mengunggah...",
+  "uploadCover": "Unggah Sampul",
+  "description": "Deskripsi Buku",
+  "aboutBook": "Tentang Buku Ini",
+  "noDescription": "Tidak ada deskripsi tersedia."
 }

@@ -10,3 +10,6 @@ database_id = "d37e997b-bb57-4b9c-bb60-6f4d1eafa880"
 [[vectorize]]
 binding = "VECTORIZE_INDEX"
 index_name = "faces-index"
+
+[vars]
+IMGBB_API_KEY = "7257c77c5e67976ba5fc21d360229328"
